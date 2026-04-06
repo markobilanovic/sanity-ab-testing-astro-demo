@@ -1,5 +1,7 @@
 const AB_TOGGLE_FIELD_NAME = "showAbVariant";
 const AB_VARIANT_FIELD_NAME = "abVariant";
+const AB_TEST_REF_FIELD_NAME = "abTestRef";
+const AB_VARIANT_CODE_FIELD_NAME = "abVariantCode";
 const AB_INTERNAL_OPTION = "__abInternal";
 
 type UnknownRecord = Record<string, unknown>;
@@ -51,10 +53,36 @@ function createAbVariantField(fields: AnyField[]): AnyField {
   };
 }
 
+function createAbTestRefField(): AnyField {
+  return {
+    name: AB_TEST_REF_FIELD_NAME,
+    title: "AB Test",
+    type: "reference",
+    to: [{ type: "abTest" }],
+    options: {
+      [AB_INTERNAL_OPTION]: true,
+    },
+  };
+}
+
+function createAbVariantCodeField(): AnyField {
+  return {
+    name: AB_VARIANT_CODE_FIELD_NAME,
+    title: "AB Variant code",
+    type: "string",
+    options: {
+      [AB_INTERNAL_OPTION]: true,
+    },
+  };
+}
+
 function hasAbControlFields(fields: AnyField[]): boolean {
   const fieldNames = new Set(fields.map((field) => field.name));
   return (
-    fieldNames.has(AB_TOGGLE_FIELD_NAME) || fieldNames.has(AB_VARIANT_FIELD_NAME)
+    fieldNames.has(AB_TOGGLE_FIELD_NAME) ||
+    fieldNames.has(AB_VARIANT_FIELD_NAME) ||
+    fieldNames.has(AB_TEST_REF_FIELD_NAME) ||
+    fieldNames.has(AB_VARIANT_CODE_FIELD_NAME)
   );
 }
 
@@ -89,6 +117,8 @@ function transformObjectField(field: AnyField): AnyField {
   transformed.fields = [
     ...transformedBaseFields,
     createAbToggleField(),
+    createAbTestRefField(),
+    createAbVariantCodeField(),
     createAbVariantField(abVariantFields),
   ];
 

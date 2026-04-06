@@ -24,8 +24,7 @@ export const abTestType = defineType({
       type: "array",
       of: [{ type: "string" }],
       description:
-        "List of variant codes (for example: control, variant_1, variant_2).",
-      initialValue: ["control", "variant_1", "variant_2"],
+        "List of variant codes (for example: variant_1, variant_2).",
       validation: (rule) => rule.required().min(1),
     }),
   ],

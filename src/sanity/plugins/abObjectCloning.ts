@@ -3,6 +3,7 @@ import {
   defineDocumentFieldAction,
   definePlugin,
   isObjectInputProps,
+  type Path,
   type SchemaTypeDefinition,
 } from "sanity";
 import { abObjectCustomizer } from "../components/abObjectCustomizer";
@@ -11,13 +12,34 @@ import { withAbObject } from "../schemaTypes/helpers/withAbObject";
 
 const AB_TOGGLE_FIELD_NAME = "showAbVariant";
 const AB_VARIANT_FIELD_NAME = "abVariant";
+const AB_CONFIG_ACTION_EVENT_NAME = "abObjectCloning:openConfigDialog";
 const AbComposedObjectInput = createComposedObjectInput([abObjectCustomizer]);
-const abNoopFieldAction = defineDocumentFieldAction({
-  name: "abObjectCloning/noop",
-  useAction: () => ({
+
+function isAbControlFieldPath(path: Path): boolean {
+  const lastSegment = path[path.length - 1];
+  return (
+    typeof lastSegment === "string" &&
+    (lastSegment === AB_TOGGLE_FIELD_NAME || lastSegment === AB_VARIANT_FIELD_NAME)
+  );
+}
+
+const configureAbVariantFieldAction = defineDocumentFieldAction({
+  name: "abObjectCloning/configureVariant",
+  useAction: ({ path, schemaType }) => ({
     type: "action",
-    title: "AB test action (noop)",
-    onAction: () => {},
+    hidden: !hasAbFields(schemaType) || isAbControlFieldPath(path),
+    title: "Configure AB variant",
+    onAction: () => {
+      if (typeof window === "undefined") {
+        return;
+      }
+
+      window.dispatchEvent(
+        new CustomEvent(AB_CONFIG_ACTION_EVENT_NAME, {
+          detail: { path },
+        }),
+      );
+    },
   }),
 });
 
@@ -43,8 +65,10 @@ export const abObjectCloning = definePlugin({
   name: "abObjectCloning",
   document: {
     unstable_fieldActions: (prev) => [
-      ...prev.filter((action) => action.name !== abNoopFieldAction.name),
-      abNoopFieldAction,
+      ...prev.filter(
+        (action) => action.name !== configureAbVariantFieldAction.name,
+      ),
+      configureAbVariantFieldAction,
     ],
   },
   schema: {
