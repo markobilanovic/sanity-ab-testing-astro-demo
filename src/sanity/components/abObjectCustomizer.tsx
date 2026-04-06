@@ -13,15 +13,21 @@ import {
 import type { ObjectInputCustomizer } from "./ComposedObjectInput";
 
 const AB_TOGGLE_FIELD_NAME = "showAbVariant";
-const AB_VARIANT_FIELD_NAME = "abVariant";
+const AB_VARIANTS_FIELD_NAME = "abVariants";
 const AB_TEST_REF_FIELD_NAME = "abTestRef";
-const AB_VARIANT_CODE_FIELD_NAME = "abVariantCode";
 const AB_CONFIG_ACTION_EVENT_NAME = "abObjectCloning:openConfigDialog";
 
 type AbTestDocument = {
   _id: string;
   name?: string;
   variantCodes?: string[];
+};
+
+type AbVariantItem = {
+  _key: string;
+  _type: "abVariantEntry";
+  variantCode: string;
+  variant: Record<string, unknown>;
 };
 
 function pathToKey(path: unknown): string {
@@ -41,9 +47,8 @@ export const abObjectCustomizer: ObjectInputCustomizer = {
   matchField: (member) => member.name === AB_TOGGLE_FIELD_NAME,
   getClaimedFieldNames: () => [
     AB_TOGGLE_FIELD_NAME,
-    AB_VARIANT_FIELD_NAME,
+    AB_VARIANTS_FIELD_NAME,
     AB_TEST_REF_FIELD_NAME,
-    AB_VARIANT_CODE_FIELD_NAME,
   ],
   render: (props) => {
     const {
@@ -62,9 +67,9 @@ export const abObjectCustomizer: ObjectInputCustomizer = {
     const [isLoadingAbTests, setIsLoadingAbTests] = useState(false);
     const [abTests, setAbTests] = useState<AbTestDocument[]>([]);
     const [selectedAbTestId, setSelectedAbTestId] = useState("");
-    const [selectedVariantCode, setSelectedVariantCode] = useState("");
+    const [selectedAbTestVariantCount, setSelectedAbTestVariantCount] = useState(0);
 
-    const abVariantField = getFieldMemberByName(props, AB_VARIANT_FIELD_NAME);
+    const abVariantsField = getFieldMemberByName(props, AB_VARIANTS_FIELD_NAME);
     const valueRecord =
       value && typeof value === "object"
         ? (value as Record<string, unknown>)
@@ -74,10 +79,9 @@ export const abObjectCustomizer: ObjectInputCustomizer = {
       typeof valueRecord[AB_TEST_REF_FIELD_NAME] === "object"
         ? (valueRecord[AB_TEST_REF_FIELD_NAME] as { _ref?: string })._ref
         : undefined;
-    const currentVariantCode =
-      typeof valueRecord?.[AB_VARIANT_CODE_FIELD_NAME] === "string"
-        ? (valueRecord[AB_VARIANT_CODE_FIELD_NAME] as string)
-        : undefined;
+    const currentVariants = Array.isArray(valueRecord?.[AB_VARIANTS_FIELD_NAME])
+      ? (valueRecord[AB_VARIANTS_FIELD_NAME] as Array<{ variantCode?: string }>)
+      : [];
     const shouldShowAbVariant = Boolean(
       value &&
         typeof value === "object" &&
@@ -88,7 +92,17 @@ export const abObjectCustomizer: ObjectInputCustomizer = {
       () => abTests.find((test) => test._id === selectedAbTestId),
       [abTests, selectedAbTestId],
     );
-    const variantCodes = selectedAbTest?.variantCodes ?? [];
+    const variantCodes = useMemo(
+      () =>
+        Array.from(
+          new Set(
+            (selectedAbTest?.variantCodes ?? []).filter(
+              (code): code is string => Boolean(code && code.trim()),
+            ),
+          ),
+        ),
+      [selectedAbTest],
+    );
 
     const openDialog = useCallback(async () => {
       setIsDialogOpen(true);
@@ -106,12 +120,11 @@ export const abObjectCustomizer: ObjectInputCustomizer = {
         setSelectedAbTestId(nextSelectedTestId);
 
         const selectedDoc = safeDocs.find((doc) => doc._id === nextSelectedTestId);
-        const fallbackVariantCode = selectedDoc?.variantCodes?.[0] ?? "";
-        setSelectedVariantCode(currentVariantCode ?? fallbackVariantCode);
+        setSelectedAbTestVariantCount(selectedDoc?.variantCodes?.length ?? 0);
       } finally {
         setIsLoadingAbTests(false);
       }
-    }, [client, currentAbTestRef, currentVariantCode]);
+    }, [client, currentAbTestRef]);
 
     useEffect(() => {
       if (typeof window === "undefined") {
@@ -142,9 +155,16 @@ export const abObjectCustomizer: ObjectInputCustomizer = {
     }, [openDialog, props.path]);
 
     const handleEnableAbVariantWithSelection = () => {
-      if (!selectedAbTestId || !selectedVariantCode) {
+      if (!selectedAbTestId || variantCodes.length === 0) {
         return;
       }
+
+      const variants: AbVariantItem[] = variantCodes.map((code, index) => ({
+        _key: `${Date.now()}-${index}-${code}`,
+        _type: "abVariantEntry",
+        variantCode: code,
+        variant: {},
+      }));
 
       onChange(
         PatchEvent.from([
@@ -157,7 +177,7 @@ export const abObjectCustomizer: ObjectInputCustomizer = {
             },
             [AB_TEST_REF_FIELD_NAME],
           ),
-          set(selectedVariantCode, [AB_VARIANT_CODE_FIELD_NAME]),
+          set(variants, [AB_VARIANTS_FIELD_NAME]),
         ]),
       );
       setIsDialogOpen(false);
@@ -168,7 +188,7 @@ export const abObjectCustomizer: ObjectInputCustomizer = {
         PatchEvent.from([
           set(false, [AB_TOGGLE_FIELD_NAME]),
           unset([AB_TEST_REF_FIELD_NAME]),
-          unset([AB_VARIANT_CODE_FIELD_NAME]),
+          unset([AB_VARIANTS_FIELD_NAME]),
         ]),
       );
     };
@@ -186,19 +206,20 @@ export const abObjectCustomizer: ObjectInputCustomizer = {
           ) : null}
         </Flex>
 
-        {currentAbTestRef && currentVariantCode ? (
+        {currentAbTestRef ? (
           <Text muted size={1}>
-            Active AB selection: {currentAbTestRef} / {currentVariantCode}
+            Active AB selection: {currentAbTestRef}
+            {currentVariants.length > 0 ? ` (${currentVariants.length} variants)` : ""}
           </Text>
         ) : null}
 
-        {shouldShowAbVariant && abVariantField ? (
+        {shouldShowAbVariant && abVariantsField ? (
           <Stack space={2}>
             <Text muted size={1}>
-              AB Variant (B)
+              AB Variants
             </Text>
             <MemberField
-              member={abVariantField}
+              member={abVariantsField}
               renderInput={renderInput}
               renderField={renderField}
               renderItem={renderItem}
@@ -226,10 +247,8 @@ export const abObjectCustomizer: ObjectInputCustomizer = {
                 <Button
                   mode="default"
                   tone="primary"
-                  text="Enable AB variant"
-                  disabled={
-                    isLoadingAbTests || !selectedAbTestId || !selectedVariantCode
-                  }
+                  text="Create AB variant copies"
+                  disabled={isLoadingAbTests || !selectedAbTestId || variantCodes.length === 0}
                   onClick={handleEnableAbVariantWithSelection}
                 />
               </Flex>
@@ -246,10 +265,10 @@ export const abObjectCustomizer: ObjectInputCustomizer = {
                   onChange={(event) => {
                     const nextTestId = event.currentTarget.value;
                     setSelectedAbTestId(nextTestId);
-                    const nextVariants =
-                      abTests.find((doc) => doc._id === nextTestId)?.variantCodes ??
-                      [];
-                    setSelectedVariantCode(nextVariants[0] ?? "");
+                    const nextVariantsCount =
+                      abTests.find((doc) => doc._id === nextTestId)?.variantCodes
+                        ?.length ?? 0;
+                    setSelectedAbTestVariantCount(nextVariantsCount);
                   }}
                 >
                   {abTests.length === 0 ? (
@@ -263,27 +282,15 @@ export const abObjectCustomizer: ObjectInputCustomizer = {
                 </Select>
               </Stack>
 
-              <Stack space={2}>
-                <Text size={1} weight="medium">
-                  Variant code
-                </Text>
-                <Select
-                  value={selectedVariantCode}
-                  disabled={isLoadingAbTests || variantCodes.length === 0}
-                  onChange={(event) =>
-                    setSelectedVariantCode(event.currentTarget.value)
-                  }
-                >
-                  {variantCodes.length === 0 ? (
-                    <option value="">No variants available</option>
-                  ) : null}
-                  {variantCodes.map((code) => (
-                    <option key={code} value={code}>
-                      {code}
-                    </option>
-                  ))}
-                </Select>
-              </Stack>
+              <Text muted size={1}>
+                {selectedAbTestId
+                  ? variantCodes.length > 0
+                    ? `Will create ${variantCodes.length} AB copies (one per variant code).`
+                    : "Selected AB test has no variant codes."
+                  : selectedAbTestVariantCount > 0
+                    ? `Will create ${selectedAbTestVariantCount} AB copies.`
+                    : "Select an AB test to continue."}
+              </Text>
             </Stack>
           </Dialog>
         ) : null}

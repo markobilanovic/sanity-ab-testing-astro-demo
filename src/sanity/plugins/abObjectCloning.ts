@@ -11,7 +11,8 @@ import { createComposedObjectInput } from "../components/ComposedObjectInput";
 import { withAbObject } from "../schemaTypes/helpers/withAbObject";
 
 const AB_TOGGLE_FIELD_NAME = "showAbVariant";
-const AB_VARIANT_FIELD_NAME = "abVariant";
+const AB_VARIANTS_FIELD_NAME = "abVariants";
+const AB_TEST_REF_FIELD_NAME = "abTestRef";
 const AB_CONFIG_ACTION_EVENT_NAME = "abObjectCloning:openConfigDialog";
 const AbComposedObjectInput = createComposedObjectInput([abObjectCustomizer]);
 
@@ -19,7 +20,9 @@ function isAbControlFieldPath(path: Path): boolean {
   const lastSegment = path[path.length - 1];
   return (
     typeof lastSegment === "string" &&
-    (lastSegment === AB_TOGGLE_FIELD_NAME || lastSegment === AB_VARIANT_FIELD_NAME)
+    (lastSegment === AB_TOGGLE_FIELD_NAME ||
+      lastSegment === AB_VARIANTS_FIELD_NAME ||
+      lastSegment === AB_TEST_REF_FIELD_NAME)
   );
 }
 
@@ -50,7 +53,10 @@ function hasAbFields(schemaType: unknown): boolean {
   }
 
   const names = new Set(fields.map((field) => field.name));
-  return names.has(AB_TOGGLE_FIELD_NAME) && names.has(AB_VARIANT_FIELD_NAME);
+  return (
+    names.has(AB_TOGGLE_FIELD_NAME) &&
+    names.has(AB_VARIANTS_FIELD_NAME)
+  );
 }
 
 function hasAbFieldMembers(
@@ -58,7 +64,10 @@ function hasAbFieldMembers(
 ): boolean {
   const fieldMembers = members.filter((member) => member.kind === "field");
   const names = new Set(fieldMembers.map((member) => member.name));
-  return names.has(AB_TOGGLE_FIELD_NAME) && names.has(AB_VARIANT_FIELD_NAME);
+  return (
+    names.has(AB_TOGGLE_FIELD_NAME) &&
+    names.has(AB_VARIANTS_FIELD_NAME)
+  );
 }
 
 export const abObjectCloning = definePlugin({
