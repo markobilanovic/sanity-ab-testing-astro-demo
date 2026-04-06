@@ -4,10 +4,13 @@ import Layout from "../../layouts/Layout.astro";
 import PortableText from "../../components/PortableText.astro";
 import { loadQuery } from "../../sanity/lib/load-query";
 import {
+  AB_TEST_VARIANT_ROUTES_QUERY,
   POST_BY_SLUG_QUERY,
   applyAbVariants,
+  resolveAbRouteFromSlug,
   resolveAbRouteContext,
   type AbRouteProps,
+  type AbTestRouteSource,
 } from "../../sanity/lib/ab-routing";
 
 export const prerender = false;
@@ -22,11 +25,11 @@ const slug = Astro.params.slug;
 const routeProps = Astro.props as Partial<AbRouteProps>;
 const rewrittenPostSlug = Astro.locals.rewrittenPostSlug;
 const rewrittenExperiment = Astro.locals.rewrittenExperiment;
-const postSlug =
+let postSlug =
   typeof routeProps.postSlug === "string"
     ? routeProps.postSlug
     : rewrittenPostSlug ?? slug;
-const routeContext =
+let routeContext =
   resolveAbRouteContext(routeProps) ??
   (rewrittenExperiment
     ? {
@@ -34,6 +37,17 @@ const routeContext =
         variantCode: rewrittenExperiment.variantCode,
       }
     : null);
+
+if (slug && !routeContext && !rewrittenPostSlug && !routeProps.postSlug) {
+  const abResult = await loadQuery<AbTestRouteSource[]>({
+    query: AB_TEST_VARIANT_ROUTES_QUERY,
+  });
+  const resolvedRoute = resolveAbRouteFromSlug(slug, abResult.data ?? []);
+  if (resolvedRoute) {
+    postSlug = resolvedRoute.postSlug;
+    routeContext = resolveAbRouteContext(resolvedRoute);
+  }
+}
 const middlewareContexts = postSlug
   ? (Astro.locals.abExperimentsByPostSlug?.[postSlug] ?? []).map(
       ({

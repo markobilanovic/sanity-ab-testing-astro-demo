@@ -126,6 +126,47 @@ export function buildAbPostStaticPaths(
   return staticPaths;
 }
 
+export function resolveAbRouteFromSlug(
+  routeSlug: string,
+  abTests: AbTestRouteSource[],
+): AbRouteProps | null {
+  const normalizedRouteSlug = normalizeNonEmptyString(routeSlug);
+  if (!normalizedRouteSlug) {
+    return null;
+  }
+
+  for (const abTest of abTests) {
+    const abTestDocId = normalizeNonEmptyString(abTest._id);
+    const abId = normalizeNonEmptyString(abTest.id);
+    if (!abTestDocId || !abId) {
+      continue;
+    }
+
+    const referencedPostSlugs = normalizeNonEmptyStrings(
+      (abTest.referencedPosts ?? []).map((post) => post.slug?.current),
+    );
+    const variantCodes = normalizeNonEmptyStrings(abTest.variantCodes);
+
+    for (const postSlug of referencedPostSlugs) {
+      for (const variantCode of variantCodes) {
+        const candidateRouteSlug = `${postSlug}-${abId}-${variantCode}`;
+        if (candidateRouteSlug !== normalizedRouteSlug) {
+          continue;
+        }
+
+        return {
+          postSlug,
+          abId,
+          abTestDocId,
+          variantCode,
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
 export function resolveAbRouteContext(
   props: Partial<AbRouteProps>,
 ): AbRouteContext | null {
