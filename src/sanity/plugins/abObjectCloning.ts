@@ -30,21 +30,37 @@ const configureAbVariantFieldAction = defineDocumentFieldAction({
   name: "abObjectCloning/configureVariant",
   useAction: ({ path, schemaType }) => ({
     type: "action",
-    hidden: !hasAbFields(schemaType) || isAbControlFieldPath(path),
+    hidden:
+      isAbControlFieldPath(path) ||
+      (!hasAbFields(schemaType) && !isFieldLevelCloneCandidate(path)),
     title: "Configure AB variant",
     onAction: () => {
       if (typeof window === "undefined") {
         return;
       }
 
+      const parentPath = path.slice(0, -1);
+
       window.dispatchEvent(
         new CustomEvent(AB_CONFIG_ACTION_EVENT_NAME, {
-          detail: { path },
+          detail: {
+            path,
+            parentPath,
+          },
         }),
       );
     },
   }),
 });
+
+function isFieldLevelCloneCandidate(path: Path): boolean {
+  if (path.length < 1) {
+    return false;
+  }
+
+  const lastSegment = path[path.length - 1];
+  return typeof lastSegment === "string";
+}
 
 function hasAbFields(schemaType: unknown): boolean {
   const fields = (schemaType as { fields?: Array<{ name?: string }> })?.fields;
@@ -101,8 +117,11 @@ export const abObjectCloning = definePlugin({
           return props.renderDefault(props);
         }
 
+        if (hasAbFields(props.schemaType)) {
+          return React.createElement(AbComposedObjectInput, props);
+        }
+
         if (
-          hasAbFields(props.schemaType) ||
           hasAbFieldMembers(
             props.members as Array<{ kind?: string; name?: string }>,
           )
@@ -110,7 +129,9 @@ export const abObjectCloning = definePlugin({
           return React.createElement(AbComposedObjectInput, props);
         }
 
-        return props.renderDefault(props);
+        // Mount composed input for other objects too so field-level AB action
+        // can be handled when the parent is the document root.
+        return React.createElement(AbComposedObjectInput, props);
       },
     },
   },

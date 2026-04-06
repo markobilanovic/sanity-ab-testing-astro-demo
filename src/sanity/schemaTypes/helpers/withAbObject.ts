@@ -109,7 +109,7 @@ function hasAbControlFields(fields: AnyField[]): boolean {
   );
 }
 
-function transformObjectField(field: AnyField): AnyField {
+function transformAbContainerField(field: AnyField): AnyField {
   const options = (field.options ?? {}) as UnknownRecord;
 
   if (options[AB_INTERNAL_OPTION]) {
@@ -148,8 +148,8 @@ function transformObjectField(field: AnyField): AnyField {
 }
 
 function transformField(field: AnyField): AnyField {
-  if (field.type === "object") {
-    return transformObjectField(field);
+  if (field.type === "object" || field.type === "document") {
+    return transformAbContainerField(field);
   }
 
   return transformNestedCollections(field);

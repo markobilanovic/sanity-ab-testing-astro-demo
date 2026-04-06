@@ -77,7 +77,7 @@ export const abObjectCustomizer: ObjectInputCustomizer = {
     AB_VARIANTS_FIELD_NAME,
     AB_TEST_REF_FIELD_NAME,
   ],
-  render: (props) => {
+  render: (props, member) => {
     const {
       renderInput,
       renderField,
@@ -107,7 +107,7 @@ export const abObjectCustomizer: ObjectInputCustomizer = {
         ? (valueRecord[AB_TEST_REF_FIELD_NAME] as { _ref?: string })._ref
         : undefined;
     const currentVariants = Array.isArray(valueRecord?.[AB_VARIANTS_FIELD_NAME])
-      ? (valueRecord[AB_VARIANTS_FIELD_NAME] as Array<{ variantCode?: string }>)
+      ? (valueRecord[AB_VARIANTS_FIELD_NAME] as AbVariantItem[])
       : [];
     const controlVariantSeed = useMemo(
       () => getControlVariantSeed(valueRecord),
@@ -164,8 +164,17 @@ export const abObjectCustomizer: ObjectInputCustomizer = {
 
       const currentPathKey = pathToKey(props.path);
       const handleOpenConfigDialog = (event: Event) => {
-        const customEvent = event as CustomEvent<{ path?: unknown }>;
-        if (pathToKey(customEvent.detail?.path) !== currentPathKey) {
+        const customEvent = event as CustomEvent<{
+          path?: unknown;
+          parentPath?: unknown;
+        }>;
+
+        const eventPath = customEvent.detail?.path;
+        const eventParentPath = customEvent.detail?.parentPath;
+        const isObjectLevelForThisInput = pathToKey(eventPath) === currentPathKey;
+        const isFieldLevelForThisInput = pathToKey(eventParentPath) === currentPathKey;
+
+        if (!isObjectLevelForThisInput && !isFieldLevelForThisInput) {
           return;
         }
 

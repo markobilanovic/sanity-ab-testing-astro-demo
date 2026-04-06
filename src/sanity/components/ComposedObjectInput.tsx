@@ -84,6 +84,20 @@ export function createComposedObjectInput(customizers: ObjectInputCustomizer[]) 
 
     const fieldMembers = members.filter(isFieldMember);
     const slotDescriptors = getSlotDescriptors(fieldMembers, customizers);
+    const matchedCustomizers = new Set(
+      slotDescriptors
+        .filter(
+          (
+            descriptor,
+          ): descriptor is Extract<SlotDescriptor, { type: "customizer" }> =>
+            descriptor.type === "customizer",
+        )
+        .map((descriptor) => descriptor.customizer),
+    );
+    const fallbackMember = fieldMembers[0];
+    const unmatchedCustomizers = fallbackMember
+      ? customizers.filter((customizer) => !matchedCustomizers.has(customizer))
+      : [];
 
     return (
       <Stack space={4}>
@@ -103,6 +117,11 @@ export function createComposedObjectInput(customizers: ObjectInputCustomizer[]) 
                 renderAnnotation={renderAnnotation}
               />
             )}
+          </Fragment>
+        ))}
+        {unmatchedCustomizers.map((customizer, index) => (
+          <Fragment key={`unmatched-customizer-${index}`}>
+            {customizer.render(props, fallbackMember)}
           </Fragment>
         ))}
       </Stack>
