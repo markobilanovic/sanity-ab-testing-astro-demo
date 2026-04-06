@@ -8,8 +8,8 @@ import {
   type Path,
   type SchemaTypeDefinition,
 } from "sanity";
-import { abObjectCustomizer } from "../components/abObjectCustomizer";
-import { createComposedObjectInput } from "../components/ComposedObjectInput";
+import { abObjectCustomizer } from "./abObjectCustomizer";
+import { createComposedObjectInput } from "./ComposedObjectInput";
 import { withAbObject } from "../schemaTypes/helpers/withAbObject";
 
 const AB_TOGGLE_FIELD_NAME = "showAbVariant";
