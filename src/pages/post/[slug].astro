@@ -15,12 +15,14 @@ export const getStaticPaths: GetStaticPaths = async () => {
 
   const abResult = await loadQuery<
     Array<{
+      _id?: string;
       id?: string;
       variantCodes?: string[];
       referencedPosts?: Array<{ slug?: { current?: string } }>;
     }>
   >({
     query: `*[_type == "abTest" && defined(id)]{
+      _id,
       id,
       variantCodes,
       "referencedPosts": *[
@@ -35,7 +37,12 @@ export const getStaticPaths: GetStaticPaths = async () => {
 
   const staticPaths: Array<{
     params: { slug: string };
-    props: { postSlug: string };
+    props: {
+      postSlug: string;
+      abId: string | null;
+      abTestDocId: string | null;
+      variantCode: string | null;
+    };
   }> = [];
   const seenRouteSlugs = new Set<string>();
 
@@ -47,13 +54,20 @@ export const getStaticPaths: GetStaticPaths = async () => {
     seenRouteSlugs.add(postSlug);
     staticPaths.push({
       params: { slug: postSlug },
-      props: { postSlug },
+      props: {
+        postSlug,
+        abId: null,
+        abTestDocId: null,
+        variantCode: null,
+      },
     });
   }
 
   for (const abTest of abResult.data ?? []) {
+    const abTestDocId =
+      typeof abTest._id === "string" ? abTest._id.trim() : "";
     const abId = typeof abTest.id === "string" ? abTest.id.trim() : "";
-    if (!abId) {
+    if (!abId || !abTestDocId) {
       continue;
     }
 
@@ -78,7 +92,12 @@ export const getStaticPaths: GetStaticPaths = async () => {
         seenRouteSlugs.add(routeSlug);
         staticPaths.push({
           params: { slug: routeSlug },
-          props: { postSlug },
+          props: {
+            postSlug,
+            abId,
+            abTestDocId,
+            variantCode,
+          },
         });
       }
     }
@@ -93,9 +112,79 @@ type PostDocument = SanityDocument & {
   slug?: { current?: string };
 };
 
+const AB_TOGGLE_FIELD_NAME = "showAbVariant";
+const AB_VARIANTS_FIELD_NAME = "abVariants";
+const AB_TEST_REF_FIELD_NAME = "abTestRef";
+
+type AbRouteContext = {
+  abTestDocId: string;
+  variantCode: string;
+};
+
+function applyAbVariants(value: unknown, context: AbRouteContext): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => applyAbVariants(item, context));
+  }
+
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  const record = value as Record<string, unknown>;
+  let nextRecord = record;
+
+  const isAbEnabled = record[AB_TOGGLE_FIELD_NAME] === true;
+  const abTestRef = record[AB_TEST_REF_FIELD_NAME] as { _ref?: string } | undefined;
+  const variants = record[AB_VARIANTS_FIELD_NAME];
+
+  if (
+    isAbEnabled &&
+    abTestRef?._ref === context.abTestDocId &&
+    Array.isArray(variants)
+  ) {
+    const matchedVariant = variants.find((variant) => {
+      if (!variant || typeof variant !== "object") {
+        return false;
+      }
+
+      const variantRecord = variant as Record<string, unknown>;
+      return variantRecord.variantCode === context.variantCode;
+    }) as Record<string, unknown> | undefined;
+
+    const variantContent =
+      matchedVariant && typeof matchedVariant.variant === "object"
+        ? (matchedVariant.variant as Record<string, unknown>)
+        : null;
+
+    if (variantContent) {
+      nextRecord = {
+        ...record,
+        ...variantContent,
+      };
+    }
+  }
+
+  const transformedRecord: Record<string, unknown> = {};
+  for (const [key, itemValue] of Object.entries(nextRecord)) {
+    transformedRecord[key] = applyAbVariants(itemValue, context);
+  }
+
+  return transformedRecord;
+}
+
 const slug = Astro.params.slug;
 const postSlug =
   typeof Astro.props.postSlug === "string" ? Astro.props.postSlug : slug;
+const selectedAbId =
+  typeof Astro.props.abId === "string" ? Astro.props.abId : null;
+const selectedAbTestDocId =
+  typeof Astro.props.abTestDocId === "string" ? Astro.props.abTestDocId : null;
+const selectedVariantCode =
+  typeof Astro.props.variantCode === "string" ? Astro.props.variantCode : null;
+const abRouteContext =
+  selectedAbId && selectedAbTestDocId && selectedVariantCode
+    ? { abTestDocId: selectedAbTestDocId, variantCode: selectedVariantCode }
+    : null;
 let post: PostDocument | null = null;
 
 try {
@@ -105,11 +194,18 @@ try {
         _id,
         title,
         body,
-        slug
+        slug,
+        showAbVariant,
+        abTestRef,
+        abVariants
       }`,
       params: { slug: postSlug },
     });
-    post = result.data ?? null;
+    const loadedPost = result.data ?? null;
+    post =
+      loadedPost && abRouteContext
+        ? (applyAbVariants(loadedPost, abRouteContext) as PostDocument)
+        : loadedPost;
   }
 } catch {
   post = null;
