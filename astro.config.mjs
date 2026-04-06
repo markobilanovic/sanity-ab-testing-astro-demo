@@ -1,6 +1,7 @@
 // @ts-check
-import { defineConfig } from "astro/config";
+import { defineConfig, memoryCache } from "astro/config";
 import react from "@astrojs/react";
+import node from "@astrojs/node";
 import sanity from "@sanity/astro";
 import { loadEnv } from "vite";
 
@@ -13,6 +14,12 @@ const { PUBLIC_SANITY_PROJECT_ID, PUBLIC_SANITY_DATASET } = loadEnv(
 // https://astro.build/config
 export default defineConfig({
   output: "static",
+  adapter: node({ mode: "standalone" }),
+  experimental: {
+    cache: {
+      provider: memoryCache(),
+    },
+  },
   vite: {
     envPrefix: ["PUBLIC_", "SANITY_STUDIO_"],
   },

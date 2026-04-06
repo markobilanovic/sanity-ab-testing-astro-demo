@@ -1,34 +1,16 @@
 ---
 import type { SanityDocument } from "@sanity/client";
-import type { GetStaticPaths } from "astro";
 import Layout from "../../layouts/Layout.astro";
 import PortableText from "../../components/PortableText.astro";
 import { loadQuery } from "../../sanity/lib/load-query";
 import {
-  AB_TEST_VARIANT_ROUTES_QUERY,
   POST_BY_SLUG_QUERY,
-  POST_SLUGS_QUERY,
   applyAbVariants,
-  buildAbPostStaticPaths,
   resolveAbRouteContext,
   type AbRouteProps,
-  type AbTestRouteSource,
 } from "../../sanity/lib/ab-routing";
 
-export const getStaticPaths: GetStaticPaths = async () => {
-  const postResult = await loadQuery<string[]>({
-    query: POST_SLUGS_QUERY,
-  });
-  const postSlugs = (postResult.data ?? []).filter(
-    (value): value is string => typeof value === "string" && value.length > 0,
-  );
-
-  const abResult = await loadQuery<AbTestRouteSource[]>({
-    query: AB_TEST_VARIANT_ROUTES_QUERY,
-  });
-
-  return buildAbPostStaticPaths(postSlugs, abResult.data ?? []);
-};
+export const prerender = false;
 
 type PostDocument = SanityDocument & {
   title: string;
@@ -38,12 +20,29 @@ type PostDocument = SanityDocument & {
 
 const slug = Astro.params.slug;
 const routeProps = Astro.props as Partial<AbRouteProps>;
+const rewrittenPostSlug = Astro.locals.rewrittenPostSlug;
+const rewrittenExperiment = Astro.locals.rewrittenExperiment;
 const postSlug =
-  typeof routeProps.postSlug === "string" ? routeProps.postSlug : slug;
-const routeContext = resolveAbRouteContext(routeProps);
+  typeof routeProps.postSlug === "string"
+    ? routeProps.postSlug
+    : rewrittenPostSlug ?? slug;
+const routeContext =
+  resolveAbRouteContext(routeProps) ??
+  (rewrittenExperiment
+    ? {
+        abTestDocId: rewrittenExperiment.abTestDocId,
+        variantCode: rewrittenExperiment.variantCode,
+      }
+    : null);
 const middlewareContexts = postSlug
   ? (Astro.locals.abExperimentsByPostSlug?.[postSlug] ?? []).map(
-      ({ abTestDocId, variantCode }) => ({
+      ({
+        abTestDocId,
+        variantCode,
+      }: {
+        abTestDocId: string;
+        variantCode: string;
+      }) => ({
         abTestDocId,
         variantCode,
       }),
@@ -53,6 +52,15 @@ const abRouteContexts = routeContext
   ? [routeContext, ...middlewareContexts]
   : middlewareContexts;
 let post: PostDocument | null = null;
+const cacheTags = postSlug ? [`post:${postSlug}`] : [];
+
+if (Astro.cache.enabled && cacheTags.length > 0) {
+  Astro.cache.set({
+    maxAge: 300,
+    swr: 900,
+    tags: cacheTags,
+  });
+}
 
 try {
   if (postSlug) {

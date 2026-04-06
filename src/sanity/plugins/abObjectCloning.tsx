@@ -11,6 +11,8 @@ import {
   useFormValue,
   type Path,
   type SchemaTypeDefinition,
+  type DocumentActionComponent,
+  type DocumentActionProps,
   type StringInputProps,
 } from "sanity";
 import { abObjectCustomizer } from "./abObjectCustomizer";
@@ -26,6 +28,8 @@ const AbComposedObjectInput = createComposedObjectInput([abObjectCustomizer]);
 
 const AB_TEST_ID_FIELD_NAME = "id";
 const AB_TEST_VARIANT_CODES_FIELD_NAME = "variantCodes";
+const REVALIDATE_ENDPOINT_PATH = "/api/revalidate";
+const POST_SCHEMA_TYPE_NAME = "post";
 
 type AbFeatureFlag = {
   id: string;
@@ -49,6 +53,11 @@ type AbObjectCloningOptions = {
   posthog?: PostHogAdapterOptions;
 };
 
+type PostDocumentLike = {
+  _id?: string;
+  slug?: { current?: string };
+};
+
 function normalizeNonEmptyStrings(input: unknown): string[] {
   if (!Array.isArray(input)) {
     return [];
@@ -62,6 +71,120 @@ function normalizeNonEmptyStrings(input: unknown): string[] {
         .filter(Boolean),
     ),
   );
+}
+
+function normalizeNonEmptyString(input: unknown): string | null {
+  if (typeof input !== "string") {
+    return null;
+  }
+
+  const trimmed = input.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function getCanonicalDocumentId(value: unknown): string | null {
+  const id = normalizeNonEmptyString(value);
+  if (!id) {
+    return null;
+  }
+
+  return id.startsWith("drafts.") ? id.slice("drafts.".length) : id;
+}
+
+function getPostSlug(document: unknown): string | null {
+  const slugValue = (document as PostDocumentLike | undefined)?.slug?.current;
+  return normalizeNonEmptyString(slugValue);
+}
+
+function isPostSchemaType(schemaType: unknown): boolean {
+  if (typeof schemaType === "string") {
+    return schemaType === POST_SCHEMA_TYPE_NAME;
+  }
+
+  return (
+    normalizeNonEmptyString((schemaType as { name?: unknown })?.name) ===
+    POST_SCHEMA_TYPE_NAME
+  );
+}
+
+async function triggerAstroRevalidation(slug: string): Promise<void> {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const payload: {
+    tags: string[];
+    paths: string[];
+    secret?: string;
+  } = {
+    tags: [`post:${slug}`],
+    paths: [`/post/${encodeURIComponent(slug)}`],
+  };
+  const revalidateSecret = normalizeNonEmptyString(
+    (
+      import.meta.env as {
+        SANITY_STUDIO_ASTRO_REVALIDATE_SECRET?: string;
+      }
+    ).SANITY_STUDIO_ASTRO_REVALIDATE_SECRET,
+  );
+  if (revalidateSecret) {
+    payload.secret = revalidateSecret;
+  }
+
+  const response = await fetch(REVALIDATE_ENDPOINT_PATH, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+    credentials: "same-origin",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to revalidate page cache (${response.status}).`);
+  }
+}
+
+function createPostPublishRevalidateAction(
+  originalAction: DocumentActionComponent,
+): DocumentActionComponent {
+  const wrappedAction: DocumentActionComponent = (props: DocumentActionProps) => {
+    const originalResult = originalAction(props);
+    if (!originalResult) {
+      return originalResult;
+    }
+
+    const originalOnHandle = originalResult.onHandle;
+    return {
+      ...originalResult,
+      onHandle: () => {
+        originalOnHandle?.();
+
+        const slug = getPostSlug(props.draft) ?? getPostSlug(props.published);
+        if (!slug) {
+          return;
+        }
+
+        // Publishing runs asynchronously; delay to reduce race conditions where
+        // cache invalidation happens before the new document revision is live.
+        window.setTimeout(() => {
+          void triggerAstroRevalidation(slug).catch((error: unknown) => {
+            console.error("[abObjectCloning] revalidation failed", {
+              slug,
+              documentId:
+                getCanonicalDocumentId(props.id) ??
+                getCanonicalDocumentId(props.draft?._id) ??
+                getCanonicalDocumentId(props.published?._id),
+              error,
+            });
+          });
+        }, 1500);
+      },
+    };
+  };
+
+  wrappedAction.action = originalAction.action;
+  return wrappedAction;
 }
 
 function areSameStringArrays(left: string[], right: string[]): boolean {
@@ -477,6 +600,21 @@ export const abObjectCloning = definePlugin<AbObjectCloningOptions | void>(
     return {
       name: "abObjectCloning",
       document: {
+        actions: (prev, context) => {
+          if (!isPostSchemaType(context.schemaType)) {
+            return prev;
+          }
+
+          return prev.map((action) => {
+            if (typeof action !== "function" || action.action !== "publish") {
+              return action;
+            }
+
+            return createPostPublishRevalidateAction(
+              action as DocumentActionComponent,
+            );
+          });
+        },
         unstable_fieldActions: (prev) => [
           ...prev.filter(
             (action) => action.name !== configureAbVariantFieldAction.name,

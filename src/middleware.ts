@@ -229,6 +229,9 @@ export const onRequest = defineMiddleware(async (context, next) => {
       return next();
     }
 
+    context.locals.rewrittenPostSlug = canonicalPostSlug;
+    context.locals.rewrittenExperiment = selectedExperiment;
+
     const rewrittenUrl = new URL(context.url);
     rewrittenUrl.pathname = rewrittenPath;
 
