@@ -110,6 +110,8 @@ export const abObjectCustomizer: ObjectInputCustomizer = {
     const currentVariants = Array.isArray(valueRecord?.[AB_VARIANTS_FIELD_NAME])
       ? (valueRecord[AB_VARIANTS_FIELD_NAME] as AbVariantItem[])
       : [];
+    const currentExperimentName =
+      currentVariants[0]?.abTestName?.trim() || currentAbTestRef;
     const controlVariantSeed = useMemo(
       () => getControlVariantSeed(valueRecord),
       [valueRecord],
@@ -244,18 +246,14 @@ export const abObjectCustomizer: ObjectInputCustomizer = {
           ) : null}
         </Flex>
 
-        {currentAbTestRef ? (
+        {currentExperimentName ? (
           <Text muted size={1}>
-            Active AB selection: {currentAbTestRef}
-            {currentVariants.length > 0 ? ` (${currentVariants.length} variants)` : ""}
+            Experiment: {currentExperimentName}
           </Text>
         ) : null}
 
         {shouldShowAbVariant && abVariantsField ? (
           <Stack space={2}>
-            <Text muted size={1}>
-              AB Variants
-            </Text>
             <MemberField
               member={abVariantsField}
               renderInput={renderInput}
