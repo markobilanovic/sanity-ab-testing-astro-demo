@@ -193,10 +193,22 @@ function applyAbVariantsForContext(
   return transformedRecord;
 }
 
-export function applyAbVariants<T>(value: T, context: AbRouteContext | null): T {
+export function applyAbVariants<T>(
+  value: T,
+  context: AbRouteContext | AbRouteContext[] | null,
+): T {
   if (!context) {
     return value;
   }
 
-  return applyAbVariantsForContext(value, context) as T;
+  const contexts = Array.isArray(context) ? context : [context];
+  if (contexts.length === 0) {
+    return value;
+  }
+
+  return contexts.reduce<unknown>(
+    (currentValue, currentContext) =>
+      applyAbVariantsForContext(currentValue, currentContext),
+    value as unknown,
+  ) as T;
 }

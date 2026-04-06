@@ -40,7 +40,18 @@ const slug = Astro.params.slug;
 const routeProps = Astro.props as Partial<AbRouteProps>;
 const postSlug =
   typeof routeProps.postSlug === "string" ? routeProps.postSlug : slug;
-const abRouteContext = resolveAbRouteContext(routeProps);
+const routeContext = resolveAbRouteContext(routeProps);
+const middlewareContexts = postSlug
+  ? (Astro.locals.abExperimentsByPostSlug?.[postSlug] ?? []).map(
+      ({ abTestDocId, variantCode }) => ({
+        abTestDocId,
+        variantCode,
+      }),
+    )
+  : [];
+const abRouteContexts = routeContext
+  ? [routeContext, ...middlewareContexts]
+  : middlewareContexts;
 let post: PostDocument | null = null;
 
 try {
@@ -50,7 +61,7 @@ try {
       params: { slug: postSlug },
     });
     const loadedPost = result.data ?? null;
-    post = loadedPost ? applyAbVariants(loadedPost, abRouteContext) : loadedPost;
+    post = loadedPost ? applyAbVariants(loadedPost, abRouteContexts) : loadedPost;
   }
 } catch {
   post = null;
