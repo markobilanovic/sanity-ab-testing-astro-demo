@@ -6,16 +6,77 @@ import PortableText from "../../components/PortableText.astro";
 import { loadQuery } from "../../sanity/lib/load-query";
 
 export const getStaticPaths: GetStaticPaths = async () => {
-  const result = await loadQuery<string[]>({
+  const postResult = await loadQuery<string[]>({
     query: `*[_type == "post" && defined(slug.current)].slug.current`,
   });
-  const slugs = (result.data ?? []).filter(
+  const postSlugs = (postResult.data ?? []).filter(
     (value): value is string => typeof value === "string" && value.length > 0,
   );
 
-  return slugs.map((value) => ({
-    params: { slug: value },
-  }));
+  const abResult = await loadQuery<
+    Array<{
+      id?: string;
+      referencedPosts?: Array<{ slug?: { current?: string } }>;
+    }>
+  >({
+    query: `*[_type == "abTest" && defined(id)]{
+      id,
+      "referencedPosts": *[
+        _type == "post" &&
+        defined(slug.current) &&
+        references(^._id)
+      ]{
+        slug
+      }
+    }`,
+  });
+
+  const staticPaths: Array<{
+    params: { slug: string };
+    props: { postSlug: string; abId: string | null };
+  }> = [];
+  const seenRouteSlugs = new Set<string>();
+
+  for (const postSlug of postSlugs) {
+    if (seenRouteSlugs.has(postSlug)) {
+      continue;
+    }
+
+    seenRouteSlugs.add(postSlug);
+    staticPaths.push({
+      params: { slug: postSlug },
+      props: { postSlug, abId: null },
+    });
+  }
+
+  for (const abTest of abResult.data ?? []) {
+    const abId = typeof abTest.id === "string" ? abTest.id.trim() : "";
+    if (!abId) {
+      continue;
+    }
+
+    const referencedPostSlugs = (abTest.referencedPosts ?? [])
+      .map((post) => post.slug?.current)
+      .filter(
+        (value): value is string =>
+          typeof value === "string" && value.trim().length > 0,
+      );
+
+    for (const postSlug of referencedPostSlugs) {
+      const routeSlug = `${postSlug}-${abId}`;
+      if (seenRouteSlugs.has(routeSlug)) {
+        continue;
+      }
+
+      seenRouteSlugs.add(routeSlug);
+      staticPaths.push({
+        params: { slug: routeSlug },
+        props: { postSlug, abId },
+      });
+    }
+  }
+
+  return staticPaths;
 };
 
 type PostDocument = SanityDocument & {
@@ -25,10 +86,12 @@ type PostDocument = SanityDocument & {
 };
 
 const slug = Astro.params.slug;
+const postSlug =
+  typeof Astro.props.postSlug === "string" ? Astro.props.postSlug : slug;
 let post: PostDocument | null = null;
 
 try {
-  if (slug) {
+  if (postSlug) {
     const result = await loadQuery<PostDocument>({
       query: `*[_type == "post" && slug.current == $slug][0]{
         _id,
@@ -36,7 +99,7 @@ try {
         body,
         slug
       }`,
-      params: { slug },
+      params: { slug: postSlug },
     });
     post = result.data ?? null;
   }
