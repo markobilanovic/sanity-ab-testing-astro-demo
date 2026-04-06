@@ -1,7 +1,15 @@
 const AB_TOGGLE_FIELD_NAME = "showAbVariant";
 const AB_VARIANTS_FIELD_NAME = "abVariants";
 const AB_TEST_REF_FIELD_NAME = "abTestRef";
+const AB_TEST_NAME_FIELD_NAME = "abTestName";
 const AB_INTERNAL_OPTION = "__abInternal";
+const AB_VARIANTS_DISABLE_ACTIONS = [
+  "add",
+  "addBefore",
+  "addAfter",
+  "remove",
+  "duplicate",
+];
 
 type UnknownRecord = Record<string, unknown>;
 type AnyField = UnknownRecord & {
@@ -61,6 +69,7 @@ function createAbVariantsField(fields: AnyField[]): AnyField {
     type: "array",
     options: {
       [AB_INTERNAL_OPTION]: true,
+      disableActions: AB_VARIANTS_DISABLE_ACTIONS,
     },
     of: [
       {
@@ -76,6 +85,15 @@ function createAbVariantsField(fields: AnyField[]): AnyField {
           },
         },
         fields: [
+          {
+            name: AB_TEST_NAME_FIELD_NAME,
+            title: "AB test name",
+            type: "string",
+            readOnly: true,
+            options: {
+              [AB_INTERNAL_OPTION]: true,
+            },
+          },
           {
             name: "variantCode",
             title: "Variant code",

@@ -39,13 +39,13 @@ const configureAbVariantFieldAction = defineDocumentFieldAction({
         return;
       }
 
-      const parentPath = path.slice(0, -1);
+      const isObjectLevelAction = hasAbFields(schemaType);
+      const targetPath = isObjectLevelAction ? path : path.slice(0, -1);
 
       window.dispatchEvent(
         new CustomEvent(AB_CONFIG_ACTION_EVENT_NAME, {
           detail: {
-            path,
-            parentPath,
+            targetPath,
           },
         }),
       );

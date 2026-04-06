@@ -27,6 +27,7 @@ type AbTestDocument = {
 type AbVariantItem = {
   _key: string;
   _type: "abVariantEntry";
+  abTestName: string;
   variantCode: string;
   variant: Record<string, unknown>;
 };
@@ -123,6 +124,7 @@ export const abObjectCustomizer: ObjectInputCustomizer = {
       () => abTests.find((test) => test._id === selectedAbTestId),
       [abTests, selectedAbTestId],
     );
+    const selectedAbTestName = selectedAbTest?.name || selectedAbTestId;
     const variantCodes = useMemo(
       () =>
         Array.from(
@@ -165,16 +167,11 @@ export const abObjectCustomizer: ObjectInputCustomizer = {
       const currentPathKey = pathToKey(props.path);
       const handleOpenConfigDialog = (event: Event) => {
         const customEvent = event as CustomEvent<{
-          path?: unknown;
-          parentPath?: unknown;
+          targetPath?: unknown;
         }>;
 
-        const eventPath = customEvent.detail?.path;
-        const eventParentPath = customEvent.detail?.parentPath;
-        const isObjectLevelForThisInput = pathToKey(eventPath) === currentPathKey;
-        const isFieldLevelForThisInput = pathToKey(eventParentPath) === currentPathKey;
-
-        if (!isObjectLevelForThisInput && !isFieldLevelForThisInput) {
+        const eventTargetPath = customEvent.detail?.targetPath;
+        if (pathToKey(eventTargetPath) !== currentPathKey) {
           return;
         }
 
@@ -202,6 +199,7 @@ export const abObjectCustomizer: ObjectInputCustomizer = {
       const variants: AbVariantItem[] = variantCodes.map((code, index) => ({
         _key: `${Date.now()}-${index}-${code}`,
         _type: "abVariantEntry",
+        abTestName: selectedAbTestName,
         variantCode: code,
         variant: cloneValue(controlVariantSeed),
       }));
