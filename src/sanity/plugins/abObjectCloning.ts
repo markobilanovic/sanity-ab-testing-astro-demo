@@ -1,5 +1,7 @@
 import React from "react";
 import {
+  defineField,
+  defineType,
   defineDocumentFieldAction,
   definePlugin,
   isObjectInputProps,
@@ -13,8 +15,39 @@ import { withAbObject } from "../schemaTypes/helpers/withAbObject";
 const AB_TOGGLE_FIELD_NAME = "showAbVariant";
 const AB_VARIANTS_FIELD_NAME = "abVariants";
 const AB_TEST_REF_FIELD_NAME = "abTestRef";
+const AB_TEST_TYPE_NAME = "abTest";
 const AB_CONFIG_ACTION_EVENT_NAME = "abObjectCloning:openConfigDialog";
 const AbComposedObjectInput = createComposedObjectInput([abObjectCustomizer]);
+
+const abTestType = defineType({
+  name: AB_TEST_TYPE_NAME,
+  title: "AB Test",
+  type: "document",
+  fields: [
+    defineField({
+      name: "name",
+      title: "Name",
+      type: "string",
+      validation: (rule) => rule.required(),
+    }),
+    defineField({
+      name: "id",
+      title: "ID",
+      type: "string",
+      description: "Unique identifier for this AB test.",
+      validation: (rule) => rule.required(),
+    }),
+    defineField({
+      name: "variantCodes",
+      title: "Variant Codes",
+      type: "array",
+      of: [{ type: "string" }],
+      description:
+        "List of variant codes (for example: variant_1, variant_2).",
+      validation: (rule) => rule.required().min(1),
+    }),
+  ],
+});
 
 function isAbControlFieldPath(path: Path): boolean {
   const lastSegment = path[path.length - 1];
@@ -97,13 +130,24 @@ export const abObjectCloning = definePlugin({
     ],
   },
   schema: {
-    types: (prev) =>
-      prev.map(
+    types: (prev) => {
+      const withAbTestType = prev.some(
         (schemaType) =>
-          withAbObject(
-            schemaType as unknown as Record<string, unknown>,
-          ) as unknown as SchemaTypeDefinition,
-      ),
+          (schemaType as { name?: string }).name === AB_TEST_TYPE_NAME,
+      )
+        ? prev
+        : [...prev, abTestType];
+
+      return withAbTestType.map((schemaType) => {
+        if ((schemaType as { name?: string }).name === AB_TEST_TYPE_NAME) {
+          return schemaType;
+        }
+
+        return withAbObject(
+          schemaType as unknown as Record<string, unknown>,
+        ) as unknown as SchemaTypeDefinition;
+      });
+    },
   },
   form: {
     components: {
