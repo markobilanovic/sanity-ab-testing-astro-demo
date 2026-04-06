@@ -160,6 +160,19 @@ function getActiveFeatureFlags(
   return activeFlags;
 }
 
+function getCanonicalPostSlug(pathname: string): string | null {
+  const match = /^\/post\/([^/]+)\/?$/.exec(pathname);
+  if (!match) {
+    return null;
+  }
+
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return match[1];
+  }
+}
+
 export const onRequest = defineMiddleware(async (context, next) => {
   const client = getPosthogClient();
   if (!client) {
@@ -186,7 +199,6 @@ export const onRequest = defineMiddleware(async (context, next) => {
       client.getAllFlagsAndPayloads(distinctId),
     ]);
 
-    console.log('posthogFlags' , posthogFlags);
     const featureFlags = extractFeatureFlags(posthogFlags);
     const activeFeatureFlags = getActiveFeatureFlags(featureFlags);
     console.info("[middleware][posthog] active feature flags", {
@@ -198,6 +210,36 @@ export const onRequest = defineMiddleware(async (context, next) => {
       abTests,
       featureFlags,
     );
+
+    const canonicalPostSlug = getCanonicalPostSlug(context.url.pathname);
+    if (!canonicalPostSlug) {
+      return next();
+    }
+
+    const assignedExperiments =
+      context.locals.abExperimentsByPostSlug[canonicalPostSlug] ?? [];
+    const selectedExperiment = assignedExperiments[0];
+    if (!selectedExperiment) {
+      return next();
+    }
+
+    const rewrittenSlug = `${canonicalPostSlug}-${selectedExperiment.abId}-${selectedExperiment.variantCode}`;
+    const rewrittenPath = `/post/${encodeURIComponent(rewrittenSlug)}`;
+    if (rewrittenPath === context.url.pathname) {
+      return next();
+    }
+
+    const rewrittenUrl = new URL(context.url);
+    rewrittenUrl.pathname = rewrittenPath;
+
+    console.info("[middleware][posthog] rewriting post url", {
+      from: context.url.pathname,
+      to: rewrittenPath,
+      distinctId,
+      experiment: selectedExperiment,
+    });
+
+    return context.rewrite(rewrittenUrl);
   } catch {
     context.locals.abExperimentsByPostSlug = {};
   }
