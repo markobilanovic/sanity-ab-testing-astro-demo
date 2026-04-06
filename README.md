@@ -1,43 +1,57 @@
-# Astro Starter Kit: Minimal
+# Astro + Sanity (minimal starter)
+
+Minimal Astro project with embedded Sanity Studio at `/studio` and a dynamic
+post route at `/post/[slug]`.
+
+## 1) Prerequisites
+
+- Node.js 22+
+- A Sanity account
+
+## 2) Install and environment setup
+
+Copy environment variables:
 
 ```sh
-npm create astro@latest -- --template minimal
+cp .env.example .env
 ```
 
-> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
+Initialize Sanity and write values into `.env`:
 
-## 🚀 Project Structure
-
-Inside of your Astro project, you'll see the following folders and files:
-
-```text
-/
-├── public/
-├── src/
-│   └── pages/
-│       └── index.astro
-└── package.json
+```sh
+npx sanity@latest init --env .env
 ```
 
-Astro looks for `.astro` or `.md` files in the `src/pages/` directory. Each page is exposed as a route based on its file name.
+This should populate:
 
-There's nothing special about `src/components/`, but that's where we like to put any Astro/React/Vue/Svelte/Preact components.
+- `PUBLIC_SANITY_PROJECT_ID`
+- `PUBLIC_SANITY_DATASET`
 
-Any static assets, like images, can be placed in the `public/` directory.
+## 3) Run the app
 
-## 🧞 Commands
+```sh
+npm run dev
+```
 
-All commands are run from the root of the project, from a terminal:
+Open:
 
-| Command                   | Action                                           |
-| :------------------------ | :----------------------------------------------- |
-| `npm install`             | Installs dependencies                            |
-| `npm run dev`             | Starts local dev server at `localhost:4321`      |
-| `npm run build`           | Build your production site to `./dist/`          |
-| `npm run preview`         | Preview your build locally, before deploying     |
-| `npm run astro ...`       | Run CLI commands like `astro add`, `astro check` |
-| `npm run astro -- --help` | Get help using the Astro CLI                     |
+- Site: `http://localhost:4321`
+- Studio: `http://localhost:4321/studio`
 
-## 👀 Want to learn more?
+## 4) Create first post
 
-Feel free to check [our documentation](https://docs.astro.build) or jump into our [Discord server](https://astro.build/chat).
+In Studio, create a `Post` document:
+
+- Set `Title`
+- Generate `Slug`
+- Add optional `Body`
+- Publish
+
+Then open `http://localhost:4321/post/<your-slug>`.
+
+## Project notes
+
+- Sanity integration config: `astro.config.mjs`
+- Studio config: `sanity.config.ts`
+- Schema: `src/sanity/schemaTypes`
+- Query wrapper: `src/sanity/lib/load-query.ts`

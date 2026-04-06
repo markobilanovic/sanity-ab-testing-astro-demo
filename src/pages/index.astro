@@ -1,17 +1,54 @@
 ---
+import Layout from "../layouts/Layout.astro";
+import { loadQuery } from "../sanity/lib/load-query";
 
+type PostListItem = {
+  _id: string;
+  title: string;
+  slug?: { current?: string };
+};
+
+let posts: PostListItem[] = [];
+let loadError = false;
+
+try {
+  const result = await loadQuery<PostListItem[]>({
+    query: `*[_type == "post"] | order(publishedAt desc){
+      _id,
+      title,
+      slug
+    }`,
+  });
+  posts = result.data ?? [];
+} catch {
+  loadError = true;
+}
 ---
 
-<html lang="en">
-	<head>
-		<meta charset="utf-8" />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<link rel="icon" href="/favicon.ico" />
-		<meta name="viewport" content="width=device-width" />
-		<meta name="generator" content={Astro.generator} />
-		<title>Astro</title>
-	</head>
-	<body>
-		<h1>Astro</h1>
-	</body>
-</html>
+<Layout title="Astro + Sanity blog">
+  <h1>Astro + Sanity</h1>
+  <p>
+    Open <a href="/studio">/studio</a> to manage content, then create a post and
+    publish it.
+  </p>
+  {loadError && (
+    <p>
+      Could not load posts yet. Confirm your Sanity project values in `.env`,
+      then refresh.
+    </p>
+  )}
+
+  {
+    posts.length > 0 ? (
+      <ul>
+        {posts.map((post) => (
+          <li>
+            <a href={`/post/${post.slug?.current}`}>{post.title}</a>
+          </li>
+        ))}
+      </ul>
+    ) : (
+      <p>No posts yet. Create one in Studio first.</p>
+    )
+  }
+</Layout>

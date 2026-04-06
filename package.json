@@ -1,5 +1,5 @@
 {
-  "name": "violet-visual",
+  "name": "sanity-astro-minimal",
   "type": "module",
   "version": "0.0.1",
   "engines": {
@@ -9,9 +9,19 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "sanity": "sanity"
   },
   "dependencies": {
-    "astro": "^6.1.3"
+    "@astrojs/node": "^10.0.4",
+    "@astrojs/react": "^5.0.2",
+    "@portabletext/types": "^4.0.2",
+    "@sanity/astro": "^3.3.1",
+    "@sanity/image-url": "^2.1.1",
+    "astro": "^6.1.3",
+    "astro-portabletext": "^0.13.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "sanity": "^5.19.0"
   }
 }

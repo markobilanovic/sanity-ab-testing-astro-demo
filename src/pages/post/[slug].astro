@@ -1,0 +1,49 @@
+---
+import type { SanityDocument } from "@sanity/client";
+import Layout from "../../layouts/Layout.astro";
+import PortableText from "../../components/PortableText.astro";
+import { loadQuery } from "../../sanity/lib/load-query";
+
+export const prerender = false;
+
+type PostDocument = SanityDocument & {
+  title: string;
+  body?: unknown[];
+  slug?: { current?: string };
+};
+
+const { params } = Astro;
+let post: PostDocument | null = null;
+
+try {
+  const result = await loadQuery<PostDocument>({
+    query: `*[_type == "post" && slug.current == $slug][0]{
+      _id,
+      title,
+      body,
+      slug
+    }`,
+    params,
+  });
+  post = result.data ?? null;
+} catch {
+  post = null;
+}
+---
+
+<Layout title={post?.title ?? "Post not found"}>
+  {post ? (
+    <article>
+      <h1>{post.title}</h1>
+      <PortableText portableText={post.body ?? []} />
+    </article>
+  ) : (
+    <article>
+      <h1>Post not found</h1>
+      <p>
+        Either the slug does not exist, or Sanity is not configured yet in
+        `.env`.
+      </p>
+    </article>
+  )}
+</Layout>

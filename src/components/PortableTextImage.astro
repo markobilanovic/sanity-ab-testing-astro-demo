@@ -1,0 +1,9 @@
+---
+import { urlForImage } from "../sanity/lib/url-for-image";
+
+const { asset, alt } = Astro.props.node;
+const fallbackAlt = typeof alt === "string" && alt.length > 0 ? alt : "";
+const imageUrl = urlForImage(asset).width(1200).auto("format").url();
+---
+
+<img src={imageUrl} alt={fallbackAlt} loading="lazy" style="max-width: 100%; height: auto;" />
