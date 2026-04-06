@@ -1,5 +1,6 @@
 import React from "react";
 import {
+  defineDocumentFieldAction,
   definePlugin,
   isObjectInputProps,
   type SchemaTypeDefinition,
@@ -11,6 +12,14 @@ import { withAbObject } from "../schemaTypes/helpers/withAbObject";
 const AB_TOGGLE_FIELD_NAME = "showAbVariant";
 const AB_VARIANT_FIELD_NAME = "abVariant";
 const AbComposedObjectInput = createComposedObjectInput([abObjectCustomizer]);
+const abNoopFieldAction = defineDocumentFieldAction({
+  name: "abObjectCloning/noop",
+  useAction: () => ({
+    type: "action",
+    title: "AB test action (noop)",
+    onAction: () => {},
+  }),
+});
 
 function hasAbFields(schemaType: unknown): boolean {
   const fields = (schemaType as { fields?: Array<{ name?: string }> })?.fields;
@@ -32,6 +41,12 @@ function hasAbFieldMembers(
 
 export const abObjectCloning = definePlugin({
   name: "abObjectCloning",
+  document: {
+    unstable_fieldActions: (prev) => [
+      ...prev.filter((action) => action.name !== abNoopFieldAction.name),
+      abNoopFieldAction,
+    ],
+  },
   schema: {
     types: (prev) =>
       prev.map(
