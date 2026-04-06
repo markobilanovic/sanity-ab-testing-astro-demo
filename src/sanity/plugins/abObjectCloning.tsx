@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Select, Stack, Text } from "@sanity/ui";
+import { Card, Select, Stack, Text } from "@sanity/ui";
 import {
   defineField,
   defineType,
@@ -345,9 +345,9 @@ function AbTestFeatureFlagInput(
         </Text>
       ) : null}
       {loadError ? (
-        <Text size={1} tone="critical">
-          {loadError}
-        </Text>
+        <Card tone="critical" padding={2} radius={2}>
+          <Text size={1}>{loadError}</Text>
+        </Card>
       ) : null}
     </Stack>
   );
