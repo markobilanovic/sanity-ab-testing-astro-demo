@@ -17,7 +17,7 @@ import {
 } from "sanity";
 import { abObjectCustomizer } from "./abObjectCustomizer";
 import { createComposedObjectInput } from "./ComposedObjectInput";
-import { withAbObject } from "../schemaTypes/helpers/withAbObject";
+import { withAbObject } from "./withAbObject";
 
 const AB_TOGGLE_FIELD_NAME = "showAbVariant";
 const AB_VARIANTS_FIELD_NAME = "abVariants";
