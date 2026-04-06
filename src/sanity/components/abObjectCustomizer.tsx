@@ -14,6 +14,7 @@ import type { ObjectInputCustomizer } from "./ComposedObjectInput";
 
 const AB_TOGGLE_FIELD_NAME = "showAbVariant";
 const AB_VARIANTS_FIELD_NAME = "abVariants";
+const AB_VARIANT_FIELD_NAME = "abVariant";
 const AB_TEST_REF_FIELD_NAME = "abTestRef";
 const AB_CONFIG_ACTION_EVENT_NAME = "abObjectCloning:openConfigDialog";
 
@@ -29,6 +30,32 @@ type AbVariantItem = {
   variantCode: string;
   variant: Record<string, unknown>;
 };
+
+function cloneValue<T>(value: T): T {
+  if (typeof structuredClone === "function") {
+    return structuredClone(value);
+  }
+
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function getControlVariantSeed(
+  valueRecord: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  if (!valueRecord) {
+    return {};
+  }
+
+  const controlEntries = Object.entries(valueRecord).filter(
+    ([key]) =>
+      key !== AB_TOGGLE_FIELD_NAME &&
+      key !== AB_VARIANTS_FIELD_NAME &&
+      key !== AB_VARIANT_FIELD_NAME &&
+      key !== AB_TEST_REF_FIELD_NAME,
+  );
+
+  return cloneValue(Object.fromEntries(controlEntries));
+}
 
 function pathToKey(path: unknown): string {
   return JSON.stringify(path);
@@ -82,6 +109,10 @@ export const abObjectCustomizer: ObjectInputCustomizer = {
     const currentVariants = Array.isArray(valueRecord?.[AB_VARIANTS_FIELD_NAME])
       ? (valueRecord[AB_VARIANTS_FIELD_NAME] as Array<{ variantCode?: string }>)
       : [];
+    const controlVariantSeed = useMemo(
+      () => getControlVariantSeed(valueRecord),
+      [valueRecord],
+    );
     const shouldShowAbVariant = Boolean(
       value &&
         typeof value === "object" &&
@@ -163,7 +194,7 @@ export const abObjectCustomizer: ObjectInputCustomizer = {
         _key: `${Date.now()}-${index}-${code}`,
         _type: "abVariantEntry",
         variantCode: code,
-        variant: {},
+        variant: cloneValue(controlVariantSeed),
       }));
 
       onChange(
