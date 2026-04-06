@@ -16,11 +16,13 @@ export const getStaticPaths: GetStaticPaths = async () => {
   const abResult = await loadQuery<
     Array<{
       id?: string;
+      variantCodes?: string[];
       referencedPosts?: Array<{ slug?: { current?: string } }>;
     }>
   >({
     query: `*[_type == "abTest" && defined(id)]{
       id,
+      variantCodes,
       "referencedPosts": *[
         _type == "post" &&
         defined(slug.current) &&
@@ -33,7 +35,7 @@ export const getStaticPaths: GetStaticPaths = async () => {
 
   const staticPaths: Array<{
     params: { slug: string };
-    props: { postSlug: string; abId: string | null };
+    props: { postSlug: string };
   }> = [];
   const seenRouteSlugs = new Set<string>();
 
@@ -45,7 +47,7 @@ export const getStaticPaths: GetStaticPaths = async () => {
     seenRouteSlugs.add(postSlug);
     staticPaths.push({
       params: { slug: postSlug },
-      props: { postSlug, abId: null },
+      props: { postSlug },
     });
   }
 
@@ -61,18 +63,24 @@ export const getStaticPaths: GetStaticPaths = async () => {
         (value): value is string =>
           typeof value === "string" && value.trim().length > 0,
       );
+    const variantCodes = (abTest.variantCodes ?? []).filter(
+      (value): value is string =>
+        typeof value === "string" && value.trim().length > 0,
+    );
 
     for (const postSlug of referencedPostSlugs) {
-      const routeSlug = `${postSlug}-${abId}`;
-      if (seenRouteSlugs.has(routeSlug)) {
-        continue;
-      }
+      for (const variantCode of variantCodes) {
+        const routeSlug = `${postSlug}-${abId}-${variantCode}`;
+        if (seenRouteSlugs.has(routeSlug)) {
+          continue;
+        }
 
-      seenRouteSlugs.add(routeSlug);
-      staticPaths.push({
-        params: { slug: routeSlug },
-        props: { postSlug, abId },
-      });
+        seenRouteSlugs.add(routeSlug);
+        staticPaths.push({
+          params: { slug: routeSlug },
+          props: { postSlug },
+        });
+      }
     }
   }
 
