@@ -1,6 +1,5 @@
 // @ts-check
 import { defineConfig } from "astro/config";
-import node from "@astrojs/node";
 import react from "@astrojs/react";
 import sanity from "@sanity/astro";
 import { loadEnv } from "vite";
@@ -13,8 +12,7 @@ const { PUBLIC_SANITY_PROJECT_ID, PUBLIC_SANITY_DATASET } = loadEnv(
 
 // https://astro.build/config
 export default defineConfig({
-  output: "server",
-  adapter: node({ mode: "standalone" }),
+  output: "static",
   integrations: [
     sanity({
       projectId: PUBLIC_SANITY_PROJECT_ID || "your-project-id",

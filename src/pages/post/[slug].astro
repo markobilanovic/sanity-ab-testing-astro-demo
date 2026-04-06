@@ -1,10 +1,22 @@
 ---
 import type { SanityDocument } from "@sanity/client";
+import type { GetStaticPaths } from "astro";
 import Layout from "../../layouts/Layout.astro";
 import PortableText from "../../components/PortableText.astro";
 import { loadQuery } from "../../sanity/lib/load-query";
 
-export const prerender = false;
+export const getStaticPaths: GetStaticPaths = async () => {
+  const result = await loadQuery<string[]>({
+    query: `*[_type == "post" && defined(slug.current)].slug.current`,
+  });
+  const slugs = (result.data ?? []).filter(
+    (value): value is string => typeof value === "string" && value.length > 0,
+  );
+
+  return slugs.map((value) => ({
+    params: { slug: value },
+  }));
+};
 
 type PostDocument = SanityDocument & {
   title: string;
@@ -12,20 +24,22 @@ type PostDocument = SanityDocument & {
   slug?: { current?: string };
 };
 
-const { params } = Astro;
+const slug = Astro.params.slug;
 let post: PostDocument | null = null;
 
 try {
-  const result = await loadQuery<PostDocument>({
-    query: `*[_type == "post" && slug.current == $slug][0]{
-      _id,
-      title,
-      body,
-      slug
-    }`,
-    params,
-  });
-  post = result.data ?? null;
+  if (slug) {
+    const result = await loadQuery<PostDocument>({
+      query: `*[_type == "post" && slug.current == $slug][0]{
+        _id,
+        title,
+        body,
+        slug
+      }`,
+      params: { slug },
+    });
+    post = result.data ?? null;
+  }
 } catch {
   post = null;
 }
