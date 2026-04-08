@@ -10,26 +10,27 @@ import {
   useClient,
   useFormValue,
   type Path,
-  type SchemaTypeDefinition,
   type DocumentActionComponent,
   type DocumentActionProps,
   type StringInputProps,
+  type ObjectInputProps,
 } from "sanity";
-import { abObjectCustomizer } from "./abObjectCustomizer";
-import { createComposedObjectInput } from "./ComposedObjectInput";
+import { createAbObjectCustomizer } from "./abObjectCustomizer";
+import { createComposedObjectInput } from "./ComposedObjectInput.tsx";
 import { withAbObject } from "./withAbObject";
-
-const AB_TOGGLE_FIELD_NAME = "showAbVariant";
-const AB_VARIANTS_FIELD_NAME = "abVariants";
-const AB_TEST_REF_FIELD_NAME = "abTestRef";
-const AB_TEST_TYPE_NAME = "abTest";
-const AB_CONFIG_ACTION_EVENT_NAME = "abObjectCloning:openConfigDialog";
-const AbComposedObjectInput = createComposedObjectInput([abObjectCustomizer]);
+import {
+  AB_CONFIG_ACTION_EVENT_NAME,
+  DEFAULT_AB_TEST_TYPE_NAME,
+  DEFAULT_STUDIO_API_VERSION,
+  resolveAbFieldNames,
+  type AbFieldNameOverrides,
+} from "./abConfig";
 
 const AB_TEST_ID_FIELD_NAME = "id";
 const AB_TEST_VARIANT_CODES_FIELD_NAME = "variantCodes";
-const REVALIDATE_ENDPOINT_PATH = "/api/revalidate";
-const POST_SCHEMA_TYPE_NAME = "post";
+const DEFAULT_REVALIDATE_ENDPOINT_PATH = "/api/revalidate";
+const DEFAULT_REVALIDATE_DOCUMENT_TYPE = "post";
+const DEFAULT_REVALIDATE_DELAY_MS = 1500;
 
 type AbFeatureFlag = {
   id: string;
@@ -48,9 +49,35 @@ type PostHogAdapterOptions = {
   personalApiKey?: string;
 };
 
-type AbObjectCloningOptions = {
+type RevalidationContext = {
+  slug: string;
+  documentType: string;
+};
+
+type RevalidationConfig = {
+  documentTypes?: string[];
+  endpointPath?: string;
+  secretEnvVar?: string;
+  delayMs?: number;
+  tagPrefix?: string;
+  pathPrefix?: string;
+};
+
+type ResolvedRevalidationConfig = {
+  documentTypes: string[];
+  endpointPath: string;
+  secretEnvVar: string;
+  delayMs: number;
+  getTags: (context: RevalidationContext) => string[];
+  getPaths: (context: RevalidationContext) => string[];
+};
+
+export type AbObjectCloningOptions = {
   adapter?: AbTestAdapter;
   posthog?: PostHogAdapterOptions;
+  abTestTypeName?: string;
+  fieldNames?: AbFieldNameOverrides;
+  revalidation?: RevalidationConfig | false;
 };
 
 type PostDocumentLike = {
@@ -96,18 +123,55 @@ function getPostSlug(document: unknown): string | null {
   return normalizeNonEmptyString(slugValue);
 }
 
-function isPostSchemaType(schemaType: unknown): boolean {
+function getSchemaTypeName(schemaType: unknown): string | null {
   if (typeof schemaType === "string") {
-    return schemaType === POST_SCHEMA_TYPE_NAME;
+    return normalizeNonEmptyString(schemaType);
   }
 
-  return (
-    normalizeNonEmptyString((schemaType as { name?: unknown })?.name) ===
-    POST_SCHEMA_TYPE_NAME
-  );
+  return normalizeNonEmptyString((schemaType as { name?: unknown })?.name);
 }
 
-async function triggerAstroRevalidation(slug: string): Promise<void> {
+function resolveRevalidationConfig(
+  config: RevalidationConfig | false | undefined,
+): ResolvedRevalidationConfig | null {
+  if (config === false || config === undefined) {
+    return null;
+  }
+
+  const endpointPath =
+    normalizeNonEmptyString(config?.endpointPath) ?? DEFAULT_REVALIDATE_ENDPOINT_PATH;
+  const delayMs =
+    typeof config?.delayMs === "number" && Number.isFinite(config.delayMs)
+      ? Math.max(0, config.delayMs)
+      : DEFAULT_REVALIDATE_DELAY_MS;
+  const configuredDocumentTypes = normalizeNonEmptyStrings(config?.documentTypes);
+  const documentTypes =
+    configuredDocumentTypes.length > 0
+      ? configuredDocumentTypes
+      : [DEFAULT_REVALIDATE_DOCUMENT_TYPE];
+  const secretEnvVar =
+    normalizeNonEmptyString(config?.secretEnvVar) ??
+    "SANITY_STUDIO_ASTRO_REVALIDATE_SECRET";
+  const tagPrefix =
+    normalizeNonEmptyString(config?.tagPrefix) ?? DEFAULT_REVALIDATE_DOCUMENT_TYPE;
+  const pathPrefix =
+    normalizeNonEmptyString(config?.pathPrefix) ?? DEFAULT_REVALIDATE_DOCUMENT_TYPE;
+
+  return {
+    endpointPath,
+    delayMs,
+    documentTypes,
+    secretEnvVar,
+    getTags: (context) => [`${tagPrefix}:${context.slug}`],
+    getPaths: (context) => [`/${pathPrefix}/${context.slug}`],
+  };
+}
+
+async function triggerRevalidation(
+  slug: string,
+  documentType: string,
+  revalidationConfig: ResolvedRevalidationConfig,
+): Promise<void> {
   if (typeof window === "undefined") {
     return;
   }
@@ -117,21 +181,17 @@ async function triggerAstroRevalidation(slug: string): Promise<void> {
     paths: string[];
     secret?: string;
   } = {
-    tags: [`post:${slug}`],
-    paths: [`/post/${encodeURIComponent(slug)}`],
+    tags: revalidationConfig.getTags({ slug, documentType }),
+    paths: revalidationConfig.getPaths({ slug, documentType }),
   };
   const revalidateSecret = normalizeNonEmptyString(
-    (
-      import.meta.env as {
-        SANITY_STUDIO_ASTRO_REVALIDATE_SECRET?: string;
-      }
-    ).SANITY_STUDIO_ASTRO_REVALIDATE_SECRET,
+    (import.meta.env as Record<string, unknown>)[revalidationConfig.secretEnvVar],
   );
   if (revalidateSecret) {
     payload.secret = revalidateSecret;
   }
 
-  const response = await fetch(REVALIDATE_ENDPOINT_PATH, {
+  const response = await fetch(revalidationConfig.endpointPath, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -147,6 +207,8 @@ async function triggerAstroRevalidation(slug: string): Promise<void> {
 
 function createPostPublishRevalidateAction(
   originalAction: DocumentActionComponent,
+  documentType: string,
+  revalidationConfig: ResolvedRevalidationConfig,
 ): DocumentActionComponent {
   const wrappedAction: DocumentActionComponent = (props: DocumentActionProps) => {
     const originalResult = originalAction(props);
@@ -165,20 +227,21 @@ function createPostPublishRevalidateAction(
           return;
         }
 
-        // Publishing runs asynchronously; delay to reduce race conditions where
-        // cache invalidation happens before the new document revision is live.
         window.setTimeout(() => {
-          void triggerAstroRevalidation(slug).catch((error: unknown) => {
+          void triggerRevalidation(slug, documentType, revalidationConfig).catch(
+            (error: unknown) => {
             console.error("[abObjectCloning] revalidation failed", {
               slug,
+              documentType,
               documentId:
                 getCanonicalDocumentId(props.id) ??
                 getCanonicalDocumentId(props.draft?._id) ??
                 getCanonicalDocumentId(props.published?._id),
               error,
             });
-          });
-        }, 1500);
+            },
+          );
+        }, revalidationConfig.delayMs);
       },
     };
   };
@@ -333,7 +396,7 @@ function AbTestFeatureFlagInput(
     return renderDefault(props);
   }
 
-  const client = useClient({ apiVersion: "2025-01-01" });
+  const client = useClient({ apiVersion: DEFAULT_STUDIO_API_VERSION });
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [featureFlags, setFeatureFlags] = useState<AbFeatureFlag[]>([]);
@@ -476,9 +539,9 @@ function AbTestFeatureFlagInput(
   );
 }
 
-function createAbTestType(adapter?: AbTestAdapter) {
+function createAbTestType(abTestTypeName: string, adapter?: AbTestAdapter) {
   return defineType({
-    name: AB_TEST_TYPE_NAME,
+    name: abTestTypeName,
     title: "AB Test",
     type: "document",
     fields: [
@@ -519,42 +582,49 @@ function createAbTestType(adapter?: AbTestAdapter) {
   });
 }
 
-function isAbControlFieldPath(path: Path): boolean {
+function isAbControlFieldPath(
+  path: Path,
+  fieldNames: ReturnType<typeof resolveAbFieldNames>,
+): boolean {
   const lastSegment = path[path.length - 1];
   return (
     typeof lastSegment === "string" &&
-    (lastSegment === AB_TOGGLE_FIELD_NAME ||
-      lastSegment === AB_VARIANTS_FIELD_NAME ||
-      lastSegment === AB_TEST_REF_FIELD_NAME)
+    (lastSegment === fieldNames.toggle ||
+      lastSegment === fieldNames.variants ||
+      lastSegment === fieldNames.testRef)
   );
 }
 
-const configureAbVariantFieldAction = defineDocumentFieldAction({
-  name: "abObjectCloning/configureVariant",
-  useAction: ({ path, schemaType }) => ({
-    type: "action",
-    hidden:
-      isAbControlFieldPath(path) ||
-      (!hasAbFields(schemaType) && !isFieldLevelCloneCandidate(path)),
-    title: "Configure AB variant",
-    onAction: () => {
-      if (typeof window === "undefined") {
-        return;
-      }
+function createConfigureAbVariantFieldAction(
+  fieldNames: ReturnType<typeof resolveAbFieldNames>,
+) {
+  return defineDocumentFieldAction({
+    name: "abObjectCloning/configureVariant",
+    useAction: ({ path, schemaType }) => ({
+      type: "action",
+      hidden:
+        isAbControlFieldPath(path, fieldNames) ||
+        (!hasAbFields(schemaType, fieldNames) && !isFieldLevelCloneCandidate(path)),
+      title: "Configure AB variant",
+      onAction: () => {
+        if (typeof window === "undefined") {
+          return;
+        }
 
-      const isObjectLevelAction = hasAbFields(schemaType);
-      const targetPath = isObjectLevelAction ? path : path.slice(0, -1);
+        const isObjectLevelAction = hasAbFields(schemaType, fieldNames);
+        const targetPath = isObjectLevelAction ? path : path.slice(0, -1);
 
-      window.dispatchEvent(
-        new CustomEvent(AB_CONFIG_ACTION_EVENT_NAME, {
-          detail: {
-            targetPath,
-          },
-        }),
-      );
-    },
-  }),
-});
+        window.dispatchEvent(
+          new CustomEvent(AB_CONFIG_ACTION_EVENT_NAME, {
+            detail: {
+              targetPath,
+            },
+          }),
+        );
+      },
+    }),
+  });
+}
 
 function isFieldLevelCloneCandidate(path: Path): boolean {
   if (path.length < 1) {
@@ -565,7 +635,10 @@ function isFieldLevelCloneCandidate(path: Path): boolean {
   return typeof lastSegment === "string";
 }
 
-function hasAbFields(schemaType: unknown): boolean {
+function hasAbFields(
+  schemaType: unknown,
+  fieldNames: ReturnType<typeof resolveAbFieldNames>,
+): boolean {
   const fields = (schemaType as { fields?: Array<{ name?: string }> })?.fields;
   if (!Array.isArray(fields)) {
     return false;
@@ -573,35 +646,57 @@ function hasAbFields(schemaType: unknown): boolean {
 
   const names = new Set(fields.map((field) => field.name));
   return (
-    names.has(AB_TOGGLE_FIELD_NAME) &&
-    names.has(AB_VARIANTS_FIELD_NAME)
+    names.has(fieldNames.toggle) &&
+    names.has(fieldNames.variants)
   );
 }
 
 function hasAbFieldMembers(
-  members: Array<{ kind?: string; name?: string }>,
+  members: ObjectInputProps["members"],
+  fieldNames: ReturnType<typeof resolveAbFieldNames>,
 ): boolean {
   const fieldMembers = members.filter((member) => member.kind === "field");
   const names = new Set(fieldMembers.map((member) => member.name));
   return (
-    names.has(AB_TOGGLE_FIELD_NAME) &&
-    names.has(AB_VARIANTS_FIELD_NAME)
+    names.has(fieldNames.toggle) &&
+    names.has(fieldNames.variants)
   );
 }
 
-export const abObjectCloning = definePlugin<AbObjectCloningOptions | void>(
+const abObjectCloningPlugin = definePlugin<AbObjectCloningOptions | void>(
   (options) => {
-    const resolvedOptions = (options ?? {}) as AbObjectCloningOptions;
+    const resolvedOptions: AbObjectCloningOptions = options ?? {};
     const adapter =
       resolvedOptions.adapter ??
       createPostHogAbTestAdapter(resolvedOptions.posthog);
-    const abTestType = createAbTestType(adapter);
+    const abTestTypeName =
+      normalizeNonEmptyString(resolvedOptions.abTestTypeName) ??
+      DEFAULT_AB_TEST_TYPE_NAME;
+    const fieldNames = resolveAbFieldNames(resolvedOptions.fieldNames);
+    const revalidationConfig = resolveRevalidationConfig(resolvedOptions.revalidation);
+    const abTestType = createAbTestType(abTestTypeName, adapter);
+    const configureAbVariantFieldAction =
+      createConfigureAbVariantFieldAction(fieldNames);
+    const abComposedObjectInput = createComposedObjectInput([
+      createAbObjectCustomizer({
+        abTestTypeName,
+        fieldNames: resolvedOptions.fieldNames,
+      }),
+    ]);
 
     return {
       name: "abObjectCloning",
       document: {
         actions: (prev, context) => {
-          if (!isPostSchemaType(context.schemaType)) {
+          if (!revalidationConfig) {
+            return prev;
+          }
+
+          const schemaTypeName = getSchemaTypeName(context.schemaType);
+          if (
+            !schemaTypeName ||
+            !revalidationConfig.documentTypes.includes(schemaTypeName)
+          ) {
             return prev;
           }
 
@@ -610,9 +705,7 @@ export const abObjectCloning = definePlugin<AbObjectCloningOptions | void>(
               return action;
             }
 
-            return createPostPublishRevalidateAction(
-              action as DocumentActionComponent,
-            );
+            return createPostPublishRevalidateAction(action, schemaTypeName, revalidationConfig);
           });
         },
         unstable_fieldActions: (prev) => [
@@ -625,20 +718,20 @@ export const abObjectCloning = definePlugin<AbObjectCloningOptions | void>(
       schema: {
         types: (prev) => {
           const withAbTestType = prev.some(
-            (schemaType) =>
-              (schemaType as { name?: string }).name === AB_TEST_TYPE_NAME,
+            (schemaType) => getSchemaTypeName(schemaType) === abTestTypeName,
           )
             ? prev
             : [...prev, abTestType];
 
           return withAbTestType.map((schemaType) => {
-            if ((schemaType as { name?: string }).name === AB_TEST_TYPE_NAME) {
+            if (getSchemaTypeName(schemaType) === abTestTypeName) {
               return schemaType;
             }
 
-            return withAbObject(
-              schemaType as unknown as Record<string, unknown>,
-            ) as unknown as SchemaTypeDefinition;
+            return withAbObject(schemaType, {
+              abTestTypeName,
+              fieldNames: resolvedOptions.fieldNames,
+            });
           });
         },
       },
@@ -654,24 +747,24 @@ export const abObjectCloning = definePlugin<AbObjectCloningOptions | void>(
               return props.renderDefault(props);
             }
 
-            if (hasAbFields(props.schemaType)) {
-              return React.createElement(AbComposedObjectInput, props);
-            }
-
             if (
-              hasAbFieldMembers(
-                props.members as Array<{ kind?: string; name?: string }>,
-              )
+              hasAbFieldMembers(props.members, fieldNames)
             ) {
-              return React.createElement(AbComposedObjectInput, props);
+              return React.createElement(abComposedObjectInput, props);
             }
 
-            // Mount composed input for other objects too so field-level AB action
-            // can be handled when the parent is the document root.
-            return React.createElement(AbComposedObjectInput, props);
+            if (hasAbFields(props.schemaType, fieldNames)) {
+              return React.createElement(abComposedObjectInput, props);
+            }
+
+            return props.renderDefault(props);
           },
         },
       },
     };
   },
 );
+
+export function abObjectCloning(options?: AbObjectCloningOptions) {
+  return abObjectCloningPlugin(options);
+}

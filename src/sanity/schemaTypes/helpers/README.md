@@ -12,9 +12,13 @@ plugins: [structureTool(), abObjectCloning()];
 For each object field:
 
 - `showAbVariant`: boolean toggle
-- `abVariant`: object payload for variant B (same field shape as the base object)
+- `abTestRef`: reference to the selected `abTest` document
+- `abVariants`: array of variant entries
+  - `abTestName`: readonly AB test display name
+  - `variantCode`: readonly variant code
+  - `variant`: object payload clone (same shape as the base object)
 
-Turning the toggle off hides the editor section for `abVariant` but does not clear data automatically.
+Turning the toggle off clears `abTestRef` and `abVariants`.
 
 ## GROQ example
 
@@ -25,10 +29,14 @@ Turning the toggle off hides the editor section for `abVariant` but does not cle
     category,
     audience,
     showAbVariant,
-    abVariant{
-      category,
-      audience
-    }
+    abTestRef->{_id, name},
+    abVariants[]{
+      variantCode,
+      variant{
+        category,
+        audience
+      }
+    },
   }
 }
 ```

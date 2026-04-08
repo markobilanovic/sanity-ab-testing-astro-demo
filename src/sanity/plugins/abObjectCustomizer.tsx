@@ -10,13 +10,19 @@ import {
   type FieldMember,
   type ObjectInputProps,
 } from "sanity";
-import type { ObjectInputCustomizer } from "./ComposedObjectInput";
+import type { ObjectInputCustomizer } from "./ComposedObjectInput.tsx";
+import {
+  AB_CONFIG_ACTION_EVENT_NAME,
+  DEFAULT_AB_TEST_TYPE_NAME,
+  DEFAULT_STUDIO_API_VERSION,
+  resolveAbFieldNames,
+  type AbFieldNameOverrides,
+} from "./abConfig";
 
-const AB_TOGGLE_FIELD_NAME = "showAbVariant";
-const AB_VARIANTS_FIELD_NAME = "abVariants";
-const AB_VARIANT_FIELD_NAME = "abVariant";
-const AB_TEST_REF_FIELD_NAME = "abTestRef";
-const AB_CONFIG_ACTION_EVENT_NAME = "abObjectCloning:openConfigDialog";
+export type AbObjectCustomizerOptions = {
+  abTestTypeName?: string;
+  fieldNames?: AbFieldNameOverrides;
+};
 
 type AbTestDocument = {
   _id: string;
@@ -26,7 +32,7 @@ type AbTestDocument = {
 
 type AbVariantItem = {
   _key: string;
-  _type: "abVariantEntry";
+  _type: string;
   abTestName: string;
   variantCode: string;
   variant: Record<string, unknown>;
@@ -42,6 +48,7 @@ function cloneValue<T>(value: T): T {
 
 function getControlVariantSeed(
   valueRecord: Record<string, unknown> | undefined,
+  fieldNames: ReturnType<typeof resolveAbFieldNames>,
 ): Record<string, unknown> {
   if (!valueRecord) {
     return {};
@@ -49,10 +56,10 @@ function getControlVariantSeed(
 
   const controlEntries = Object.entries(valueRecord).filter(
     ([key]) =>
-      key !== AB_TOGGLE_FIELD_NAME &&
-      key !== AB_VARIANTS_FIELD_NAME &&
-      key !== AB_VARIANT_FIELD_NAME &&
-      key !== AB_TEST_REF_FIELD_NAME,
+      key !== fieldNames.toggle &&
+      key !== fieldNames.variants &&
+      key !== fieldNames.variant &&
+      key !== fieldNames.testRef,
   );
 
   return cloneValue(Object.fromEntries(controlEntries));
@@ -66,19 +73,27 @@ function getFieldMemberByName(
   props: ObjectInputProps,
   fieldName: string,
 ): FieldMember | undefined {
-  return props.members.find(
+  const match = props.members.find(
     (member) => member.kind === "field" && member.name === fieldName,
-  ) as FieldMember | undefined;
+  );
+
+  return match?.kind === "field" ? match : undefined;
 }
 
-export const abObjectCustomizer: ObjectInputCustomizer = {
-  matchField: (member) => member.name === AB_TOGGLE_FIELD_NAME,
-  getClaimedFieldNames: () => [
-    AB_TOGGLE_FIELD_NAME,
-    AB_VARIANTS_FIELD_NAME,
-    AB_TEST_REF_FIELD_NAME,
-  ],
-  render: (props, member) => {
+export function createAbObjectCustomizer(
+  options: AbObjectCustomizerOptions = {},
+): ObjectInputCustomizer {
+  const fieldNames = resolveAbFieldNames(options.fieldNames);
+  const abTestTypeName = options.abTestTypeName ?? DEFAULT_AB_TEST_TYPE_NAME;
+
+  return {
+    matchField: (member) => member.name === fieldNames.toggle,
+    getClaimedFieldNames: () => [
+      fieldNames.toggle,
+      fieldNames.variants,
+      fieldNames.testRef,
+    ],
+    render: (props, _member) => {
     const {
       renderInput,
       renderField,
@@ -90,37 +105,36 @@ export const abObjectCustomizer: ObjectInputCustomizer = {
       onChange,
       value,
     } = props;
-    const client = useClient({ apiVersion: "2025-01-01" });
+    const client = useClient({ apiVersion: DEFAULT_STUDIO_API_VERSION });
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [isLoadingAbTests, setIsLoadingAbTests] = useState(false);
     const [abTests, setAbTests] = useState<AbTestDocument[]>([]);
     const [selectedAbTestId, setSelectedAbTestId] = useState("");
     const [selectedAbTestVariantCount, setSelectedAbTestVariantCount] = useState(0);
 
-    const abVariantsField = getFieldMemberByName(props, AB_VARIANTS_FIELD_NAME);
+    const abVariantsField = getFieldMemberByName(props, fieldNames.variants);
     const valueRecord =
       value && typeof value === "object"
         ? (value as Record<string, unknown>)
         : undefined;
     const currentAbTestRef =
-      valueRecord?.[AB_TEST_REF_FIELD_NAME] &&
-      typeof valueRecord[AB_TEST_REF_FIELD_NAME] === "object"
-        ? (valueRecord[AB_TEST_REF_FIELD_NAME] as { _ref?: string })._ref
+      valueRecord?.[fieldNames.testRef] &&
+      typeof valueRecord[fieldNames.testRef] === "object"
+        ? (valueRecord[fieldNames.testRef] as { _ref?: string })._ref
         : undefined;
-    const currentVariants = Array.isArray(valueRecord?.[AB_VARIANTS_FIELD_NAME])
-      ? (valueRecord[AB_VARIANTS_FIELD_NAME] as AbVariantItem[])
+    const currentVariants = Array.isArray(valueRecord?.[fieldNames.variants])
+      ? (valueRecord[fieldNames.variants] as AbVariantItem[])
       : [];
     const currentExperimentName =
       currentVariants[0]?.abTestName?.trim() || currentAbTestRef;
     const controlVariantSeed = useMemo(
-      () => getControlVariantSeed(valueRecord),
-      [valueRecord],
+      () => getControlVariantSeed(valueRecord, fieldNames),
+      [fieldNames, valueRecord],
     );
     const shouldShowAbVariant = Boolean(
-      value &&
-        typeof value === "object" &&
-        AB_TOGGLE_FIELD_NAME in value &&
-        (value as { showAbVariant?: boolean }).showAbVariant,
+      valueRecord &&
+        typeof valueRecord[fieldNames.toggle] === "boolean" &&
+        valueRecord[fieldNames.toggle],
     );
     const selectedAbTest = useMemo(
       () => abTests.find((test) => test._id === selectedAbTestId),
@@ -145,7 +159,7 @@ export const abObjectCustomizer: ObjectInputCustomizer = {
 
       try {
         const docs = await client.fetch<AbTestDocument[]>(
-          '*[_type == "abTest"]{_id, name, variantCodes}',
+          `*[_type == "${abTestTypeName}"]{_id, name, variantCodes}`,
         );
         const safeDocs = Array.isArray(docs) ? docs : [];
         setAbTests(safeDocs);
@@ -159,7 +173,7 @@ export const abObjectCustomizer: ObjectInputCustomizer = {
       } finally {
         setIsLoadingAbTests(false);
       }
-    }, [client, currentAbTestRef]);
+    }, [abTestTypeName, client, currentAbTestRef]);
 
     useEffect(() => {
       if (typeof window === "undefined") {
@@ -200,7 +214,7 @@ export const abObjectCustomizer: ObjectInputCustomizer = {
 
       const variants: AbVariantItem[] = variantCodes.map((code, index) => ({
         _key: `${Date.now()}-${index}-${code}`,
-        _type: "abVariantEntry",
+        _type: fieldNames.variantEntryType,
         abTestName: selectedAbTestName,
         variantCode: code,
         variant: cloneValue(controlVariantSeed),
@@ -209,15 +223,15 @@ export const abObjectCustomizer: ObjectInputCustomizer = {
       onChange(
         PatchEvent.from([
           setIfMissing({}, []),
-          set(true, [AB_TOGGLE_FIELD_NAME]),
+          set(true, [fieldNames.toggle]),
           set(
             {
               _type: "reference",
               _ref: selectedAbTestId,
             },
-            [AB_TEST_REF_FIELD_NAME],
+            [fieldNames.testRef],
           ),
-          set(variants, [AB_VARIANTS_FIELD_NAME]),
+          set(variants, [fieldNames.variants]),
         ]),
       );
       setIsDialogOpen(false);
@@ -226,9 +240,9 @@ export const abObjectCustomizer: ObjectInputCustomizer = {
     const handleDisableAbVariant = () => {
       onChange(
         PatchEvent.from([
-          set(false, [AB_TOGGLE_FIELD_NAME]),
-          unset([AB_TEST_REF_FIELD_NAME]),
-          unset([AB_VARIANTS_FIELD_NAME]),
+          set(false, [fieldNames.toggle]),
+          unset([fieldNames.testRef]),
+          unset([fieldNames.variants]),
         ]),
       );
     };
@@ -332,5 +346,6 @@ export const abObjectCustomizer: ObjectInputCustomizer = {
         ) : null}
       </Stack>
     );
-  },
-};
+    },
+  };
+}

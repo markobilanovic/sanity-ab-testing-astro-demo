@@ -1,71 +1,85 @@
-const AB_TOGGLE_FIELD_NAME = "showAbVariant";
-const AB_VARIANTS_FIELD_NAME = "abVariants";
-const AB_TEST_REF_FIELD_NAME = "abTestRef";
-const AB_TEST_NAME_FIELD_NAME = "abTestName";
-const AB_INTERNAL_OPTION = "__abInternal";
-const AB_VARIANTS_DISABLE_ACTIONS = [
-  "add",
-  "addBefore",
-  "addAfter",
-  "remove",
-  "duplicate",
-];
+import {
+  AB_INTERNAL_OPTION,
+  AB_VARIANTS_DISABLE_ACTIONS,
+  DEFAULT_AB_TEST_TYPE_NAME,
+  resolveAbFieldLabels,
+  resolveAbFieldNames,
+  type AbFieldLabelOverrides,
+  type AbFieldNameOverrides,
+} from "./abConfig";
 
 type UnknownRecord = Record<string, unknown>;
-type AnyField = UnknownRecord & {
+type AnyField = Record<string, unknown> & {
   name?: string;
   type?: string;
   title?: string;
   fields?: AnyField[];
   of?: AnyField[];
-  options?: UnknownRecord;
-  components?: UnknownRecord;
-  initialValue?: unknown;
-  readOnly?: boolean;
-  preview?: UnknownRecord;
+  options?: unknown;
 };
 
-function transformNestedCollections(field: AnyField): AnyField {
+export type WithAbObjectOptions = {
+  abTestTypeName?: string;
+  fieldNames?: AbFieldNameOverrides;
+  labels?: AbFieldLabelOverrides;
+};
+
+function transformNestedCollections(
+  field: AnyField,
+  config: WithAbObjectOptions,
+): AnyField {
   const transformed: AnyField = { ...field };
 
   if (Array.isArray(field.fields)) {
     transformed.fields = field.fields.map((nestedField) =>
-      transformField(nestedField),
+      transformField(nestedField, config),
     );
   }
 
   if (Array.isArray(field.of)) {
-    transformed.of = field.of.map((nestedType) => transformField(nestedType));
+    transformed.of = field.of.map((nestedType) => transformField(nestedType, config));
   }
 
   return transformed;
 }
 
-function createAbToggleField(): AnyField {
+function createAbToggleField(options: WithAbObjectOptions): AnyField {
+  const fieldNames = resolveAbFieldNames(options.fieldNames);
+  const labels = resolveAbFieldLabels(options.labels);
+
   return {
-    name: AB_TOGGLE_FIELD_NAME,
-    title: "Enable AB variant",
+    name: fieldNames.toggle,
+    title: labels.toggle,
     type: "boolean",
     initialValue: false,
   };
 }
 
-function createAbTestRefField(): AnyField {
+function createAbTestRefField(options: WithAbObjectOptions): AnyField {
+  const fieldNames = resolveAbFieldNames(options.fieldNames);
+  const labels = resolveAbFieldLabels(options.labels);
+
   return {
-    name: AB_TEST_REF_FIELD_NAME,
-    title: "AB Test",
+    name: fieldNames.testRef,
+    title: labels.testRef,
     type: "reference",
-    to: [{ type: "abTest" }],
+    to: [{ type: options.abTestTypeName ?? DEFAULT_AB_TEST_TYPE_NAME }],
     options: {
       [AB_INTERNAL_OPTION]: true,
     },
   };
 }
 
-function createAbVariantsField(fields: AnyField[]): AnyField {
+function createAbVariantsField(
+  fields: AnyField[],
+  options: WithAbObjectOptions,
+): AnyField {
+  const fieldNames = resolveAbFieldNames(options.fieldNames);
+  const labels = resolveAbFieldLabels(options.labels);
+
   return {
-    name: AB_VARIANTS_FIELD_NAME,
-    title: "AB Variants",
+    name: fieldNames.variants,
+    title: labels.variants,
     type: "array",
     options: {
       [AB_INTERNAL_OPTION]: true,
@@ -73,21 +87,21 @@ function createAbVariantsField(fields: AnyField[]): AnyField {
     },
     of: [
       {
-        name: "abVariantEntry",
-        title: "AB Variant Entry",
+        name: fieldNames.variantEntryType,
+        title: labels.variantEntry,
         type: "object",
         options: {
           [AB_INTERNAL_OPTION]: true,
         },
         preview: {
           select: {
-            title: "variantCode",
+            title: fieldNames.variantCode,
           },
         },
         fields: [
           {
-            name: AB_TEST_NAME_FIELD_NAME,
-            title: "AB test name",
+            name: fieldNames.testName,
+            title: labels.testName,
             type: "string",
             readOnly: true,
             options: {
@@ -95,8 +109,8 @@ function createAbVariantsField(fields: AnyField[]): AnyField {
             },
           },
           {
-            name: "variantCode",
-            title: "Variant code",
+            name: fieldNames.variantCode,
+            title: labels.variantCode,
             type: "string",
             readOnly: true,
             options: {
@@ -104,8 +118,8 @@ function createAbVariantsField(fields: AnyField[]): AnyField {
             },
           },
           {
-            name: "variant",
-            title: "Variant content",
+            name: fieldNames.variant,
+            title: labels.variant,
             type: "object",
             options: {
               [AB_INTERNAL_OPTION]: true,
@@ -119,31 +133,35 @@ function createAbVariantsField(fields: AnyField[]): AnyField {
 }
 
 function hasAbControlFields(fields: AnyField[]): boolean {
+  const abFieldNames = resolveAbFieldNames();
   const fieldNames = new Set(fields.map((field) => field.name));
   return (
-    fieldNames.has(AB_TOGGLE_FIELD_NAME) ||
-    fieldNames.has(AB_VARIANTS_FIELD_NAME) ||
-    fieldNames.has(AB_TEST_REF_FIELD_NAME)
+    fieldNames.has(abFieldNames.toggle) ||
+    fieldNames.has(abFieldNames.variants) ||
+    fieldNames.has(abFieldNames.testRef)
   );
 }
 
-function transformAbContainerField(field: AnyField): AnyField {
-  const options = (field.options ?? {}) as UnknownRecord;
+function transformAbContainerField(
+  field: AnyField,
+  config: WithAbObjectOptions,
+): AnyField {
+  const fieldOptions = (field.options ?? {}) as UnknownRecord;
 
-  if (options[AB_INTERNAL_OPTION]) {
-    return transformNestedCollections(field);
+  if (fieldOptions[AB_INTERNAL_OPTION]) {
+    return transformNestedCollections(field, config);
   }
 
   const originalFields = Array.isArray(field.fields) ? field.fields : [];
   const transformedBaseFields = originalFields.map((nestedField) =>
-    transformField(nestedField),
+    transformField(nestedField, config),
   );
 
   const transformed: AnyField = {
     ...field,
     fields: transformedBaseFields,
     options: {
-      ...options,
+      ...fieldOptions,
     },
   };
 
@@ -152,25 +170,25 @@ function transformAbContainerField(field: AnyField): AnyField {
   }
 
   const abVariantFields = originalFields.map((nestedField) =>
-    transformField(nestedField),
+    transformField(nestedField, config),
   );
 
   transformed.fields = [
     ...transformedBaseFields,
-    createAbToggleField(),
-    createAbTestRefField(),
-    createAbVariantsField(abVariantFields),
+    createAbToggleField(config),
+    createAbTestRefField(config),
+    createAbVariantsField(abVariantFields, config),
   ];
 
   return transformed;
 }
 
-function transformField(field: AnyField): AnyField {
+function transformField(field: AnyField, options: WithAbObjectOptions): AnyField {
   if (field.type === "object" || field.type === "document") {
-    return transformAbContainerField(field);
+    return transformAbContainerField(field, options);
   }
 
-  return transformNestedCollections(field);
+  return transformNestedCollections(field, options);
 }
 
 /**
@@ -181,6 +199,9 @@ function transformField(field: AnyField): AnyField {
  * Usage:
  * `defineField(withAbObject({ name: "settings", type: "object", fields: [...] }))`
  */
-export function withAbObject<TField extends AnyField>(field: TField): TField {
-  return transformField(field) as TField;
+export function withAbObject<TField extends object>(
+  field: TField,
+  options: WithAbObjectOptions = {},
+): TField {
+  return transformField(field as unknown as AnyField, options) as TField;
 }
