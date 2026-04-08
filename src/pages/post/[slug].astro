@@ -10,6 +10,7 @@ import {
   applyAbVariants,
   buildAbPostStaticPaths,
   resolveAbRouteFromSlug,
+  type AbRouteContext,
   type AbRouteProps,
   type AbTestRouteSource,
 } from "../../sanity/lib/ab-routing";
@@ -48,6 +49,114 @@ type PostDocument = SanityDocument & {
   };
 };
 
+type RelatedPost = { _id: string; title: string; slug: string };
+type RelatedPostRef = { _id?: string; _ref?: string; title?: string; slug?: string };
+
+const DEFAULT_RELATED_POSTS_TITLE = "Related posts";
+const UNTITLED_POST = "Untitled post";
+const POSTS_BY_IDS_QUERY = `*[_type == "post" && _id in $ids]{
+  _id,
+  title,
+  "slug": slug.current
+}`;
+
+const toNormalizedRelatedPost = (item: {
+  _id?: string;
+  title?: string;
+  slug?: string;
+}): RelatedPost | null => {
+  const id = item._id?.trim();
+  const slug = item.slug?.trim() || "";
+  if (!id || !slug) return null;
+  return {
+    _id: id,
+    title: item.title?.trim() || UNTITLED_POST,
+    slug,
+  };
+};
+
+const mergeUniqueRelatedPostsById = (posts: RelatedPost[]): RelatedPost[] => {
+  const byId = new Map<string, RelatedPost>();
+  posts.forEach((post) => {
+    if (!byId.has(post._id)) byId.set(post._id, post);
+  });
+  return [...byId.values()];
+};
+
+const resolveRelatedPosts = async (post: PostDocument): Promise<RelatedPost[]> => {
+  const relatedPosts = (post.relatedPostsSection?.relatedPosts ?? []) as RelatedPostRef[];
+
+  const immediateResolvedPosts = relatedPosts
+    .map((relatedPost) =>
+      toNormalizedRelatedPost({
+        _id: relatedPost?._id,
+        title: relatedPost?.title,
+        slug: relatedPost?.slug,
+      }),
+    )
+    .filter((relatedPost): relatedPost is RelatedPost => Boolean(relatedPost));
+
+  const unresolvedRefIds = relatedPosts
+    .map((relatedPost) => relatedPost?._ref?.trim() || "")
+    .filter((id) => id.length > 0);
+
+  if (unresolvedRefIds.length === 0) {
+    return immediateResolvedPosts;
+  }
+
+  const dedupedRefIds = [...new Set(unresolvedRefIds)];
+  const unresolvedResult = await loadQuery<
+    Array<{ _id?: string; title?: string; slug?: string }>
+  >({
+    query: POSTS_BY_IDS_QUERY,
+    params: { ids: dedupedRefIds },
+  });
+
+  const unresolvedById = new Map(
+    (unresolvedResult.data ?? [])
+      .filter((item) => Boolean(item?._id))
+      .map((item) => [item._id as string, item] as const),
+  );
+
+  const resolvedFromRefs = unresolvedRefIds
+    .map((refId) => unresolvedById.get(refId))
+    .map((item) => (item ? toNormalizedRelatedPost(item) : null))
+    .filter((relatedPost): relatedPost is RelatedPost => Boolean(relatedPost));
+
+  return mergeUniqueRelatedPostsById([
+    ...immediateResolvedPosts,
+    ...resolvedFromRefs,
+  ]);
+};
+
+const resolvePostSlugAndContexts = async (
+  routeSlug: string | undefined,
+  initialPostSlug: string | undefined,
+  initialContexts: AbRouteContext[],
+  shouldResolveFromRouteSlug: boolean,
+): Promise<{
+  postSlug: string | undefined;
+  contexts: AbRouteContext[];
+}> => {
+  if (!routeSlug || !shouldResolveFromRouteSlug) {
+    return { postSlug: initialPostSlug, contexts: initialContexts };
+  }
+
+  const abResult = await loadQuery<AbTestRouteSource[]>({
+    query: AB_TEST_VARIANT_ROUTES_QUERY,
+  });
+  const resolvedRoute = resolveAbRouteFromSlug(routeSlug, abResult.data ?? []);
+
+  if (!resolvedRoute) {
+    return { postSlug: initialPostSlug, contexts: initialContexts };
+  }
+
+  return {
+    postSlug: resolvedRoute.postSlug,
+    contexts: resolvedRoute.contexts,
+  };
+};
+
 const slug = Astro.params.slug;
 const routeProps = Astro.props as Partial<AbRouteProps>;
 const routeState = resolveAbRouteStateForRequest({
@@ -57,29 +166,20 @@ const routeState = resolveAbRouteStateForRequest({
   abExperimentsByPostSlug: Astro.locals.abExperimentsByPostSlug,
 });
 
-let postSlug = routeState.postSlug;
-let abRouteContexts = routeState.contexts;
+const resolvedRoute = await resolvePostSlugAndContexts(
+  slug,
+  routeState.postSlug,
+  routeState.contexts,
+  routeState.shouldResolveFromRouteSlug,
+);
 
-if (slug && routeState.shouldResolveFromRouteSlug) {
-  const abResult = await loadQuery<AbTestRouteSource[]>({
-    query: AB_TEST_VARIANT_ROUTES_QUERY,
-  });
-  const resolvedRoute = resolveAbRouteFromSlug(slug, abResult.data ?? []);
-  if (resolvedRoute) {
-    postSlug = resolvedRoute.postSlug;
-    abRouteContexts = resolvedRoute.contexts;
-  }
-}
+const postSlug = resolvedRoute.postSlug;
+const abRouteContexts = resolvedRoute.contexts;
 
 let post: PostDocument | null = null;
 const cacheTags = postSlug ? [`post:${postSlug}`] : [];
-let resolvedRelatedPosts: Array<{ _id: string; title: string; slug: string }> = [];
-let relatedPostsSectionTitle = "Related posts";
-const POSTS_BY_IDS_QUERY = `*[_type == "post" && _id in $ids]{
-  _id,
-  title,
-  "slug": slug.current
-}`;
+let resolvedRelatedPosts: RelatedPost[] = [];
+let relatedPostsSectionTitle = DEFAULT_RELATED_POSTS_TITLE;
 
 if (Astro.cache.enabled && cacheTags.length > 0) {
   Astro.cache.set({
@@ -98,60 +198,12 @@ try {
     const loadedPost = result.data ?? null;
     post = loadedPost ? applyAbVariants(loadedPost, abRouteContexts) : loadedPost;
 
-    const relatedPosts = post?.relatedPostsSection?.relatedPosts ?? [];
-    const immediateResolvedPosts = relatedPosts
-      .filter((relatedPost) => Boolean(relatedPost?._id))
-      .map((relatedPost) => ({
-        _id: relatedPost._id as string,
-        title: relatedPost.title?.trim() || "Untitled post",
-        slug: relatedPost.slug?.trim() || "",
-      }))
-      .filter((relatedPost) => relatedPost.slug.length > 0);
-
-    const unresolvedRefIds = relatedPosts
-      .map((relatedPost) => relatedPost?._ref?.trim() || "")
-      .filter((id) => id.length > 0);
-
-    if (unresolvedRefIds.length > 0) {
-      const dedupedRefIds = [...new Set(unresolvedRefIds)];
-      const unresolvedResult = await loadQuery<
-        Array<{ _id?: string; title?: string; slug?: string }>
-      >({
-        query: POSTS_BY_IDS_QUERY,
-        params: { ids: dedupedRefIds },
-      });
-
-      const unresolvedById = new Map(
-        (unresolvedResult.data ?? [])
-          .filter((item) => Boolean(item?._id))
-          .map((item) => [item._id as string, item] as const),
-      );
-
-      const resolvedFromRefs = unresolvedRefIds
-        .map((refId) => unresolvedById.get(refId))
-        .filter((item): item is { _id: string; title?: string; slug?: string } =>
-          Boolean(item?._id),
-        )
-        .map((item) => ({
-          _id: item._id,
-          title: item.title?.trim() || "Untitled post",
-          slug: item.slug?.trim() || "",
-        }))
-        .filter((item) => item.slug.length > 0);
-
-      const mergedById = new Map<string, { _id: string; title: string; slug: string }>();
-      [...immediateResolvedPosts, ...resolvedFromRefs].forEach((item) => {
-        if (!mergedById.has(item._id)) {
-          mergedById.set(item._id, item);
-        }
-      });
-      resolvedRelatedPosts = [...mergedById.values()];
-    } else {
-      resolvedRelatedPosts = immediateResolvedPosts;
+    if (post) {
+      resolvedRelatedPosts = await resolveRelatedPosts(post);
     }
 
     relatedPostsSectionTitle =
-      post?.relatedPostsSection?.title?.trim() || "Related posts";
+      post?.relatedPostsSection?.title?.trim() || DEFAULT_RELATED_POSTS_TITLE;
   }
 } catch {
   post = null;
