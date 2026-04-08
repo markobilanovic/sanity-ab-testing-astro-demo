@@ -2,6 +2,7 @@ import { defineMiddleware } from "astro:middleware";
 import { PostHog } from "posthog-node";
 import {
   AB_TEST_VARIANT_ROUTES_QUERY,
+  serializeCompositePostSlug,
   type AbTestRouteSource,
 } from "./sanity/lib/ab-routing";
 import { loadQuery } from "./sanity/lib/load-query";
@@ -160,7 +161,7 @@ function getActiveFeatureFlags(
   return activeFlags;
 }
 
-function getCanonicalPostSlug(pathname: string): string | null {
+function getRequestedPostSlug(pathname: string): string | null {
   const match = /^\/post\/([^/]+)\/?$/.exec(pathname);
   if (!match) {
     return null;
@@ -211,26 +212,39 @@ export const onRequest = defineMiddleware(async (context, next) => {
       featureFlags,
     );
 
-    const canonicalPostSlug = getCanonicalPostSlug(context.url.pathname);
+    const requestedPostSlug = getRequestedPostSlug(context.url.pathname);
+    if (!requestedPostSlug) {
+      return next();
+    }
+
+    const canonicalPostSlug = requestedPostSlug.split("--")[0]?.trim();
     if (!canonicalPostSlug) {
       return next();
     }
 
     const assignedExperiments =
       context.locals.abExperimentsByPostSlug[canonicalPostSlug] ?? [];
-    const selectedExperiment = assignedExperiments[0];
-    if (!selectedExperiment) {
+    if (assignedExperiments.length === 0) {
       return next();
     }
 
-    const rewrittenSlug = `${canonicalPostSlug}-${selectedExperiment.abId}-${selectedExperiment.variantCode}`;
+    const rewrittenSlug = serializeCompositePostSlug(
+      canonicalPostSlug,
+      assignedExperiments.map(({ abId, variantCode }) => ({
+        abId,
+        variantCode,
+      })),
+    );
+    if (!rewrittenSlug || rewrittenSlug === requestedPostSlug) {
+      return next();
+    }
+
     const rewrittenPath = `/post/${encodeURIComponent(rewrittenSlug)}`;
     if (rewrittenPath === context.url.pathname) {
       return next();
     }
 
     context.locals.rewrittenPostSlug = canonicalPostSlug;
-    context.locals.rewrittenExperiment = selectedExperiment;
 
     const rewrittenUrl = new URL(context.url);
     rewrittenUrl.pathname = rewrittenPath;
@@ -239,7 +253,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
       from: context.url.pathname,
       to: rewrittenPath,
       distinctId,
-      experiment: selectedExperiment,
+      experiments: assignedExperiments,
     });
 
     return context.rewrite(rewrittenUrl);

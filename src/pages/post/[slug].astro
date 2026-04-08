@@ -5,15 +5,34 @@ import PortableText from "../../components/PortableText.astro";
 import { loadQuery } from "../../sanity/lib/load-query";
 import {
   AB_TEST_VARIANT_ROUTES_QUERY,
+  POST_SLUGS_QUERY,
   POST_BY_SLUG_QUERY,
   applyAbVariants,
+  buildAbPostStaticPaths,
+  orderAndDedupeAbRouteContexts,
   resolveAbRouteFromSlug,
-  resolveAbRouteContext,
+  resolveAbRouteContexts,
   type AbRouteProps,
   type AbTestRouteSource,
 } from "../../sanity/lib/ab-routing";
 
-export const prerender = false;
+export const prerender = true;
+
+export async function getStaticPaths() {
+  const [postSlugResult, abTestsResult] = await Promise.all([
+    loadQuery<string[]>({
+      query: POST_SLUGS_QUERY,
+    }),
+    loadQuery<AbTestRouteSource[]>({
+      query: AB_TEST_VARIANT_ROUTES_QUERY,
+    }),
+  ]);
+
+  return buildAbPostStaticPaths(
+    postSlugResult.data ?? [],
+    abTestsResult.data ?? [],
+  );
+}
 
 type PostDocument = SanityDocument & {
   title: string;
@@ -22,7 +41,8 @@ type PostDocument = SanityDocument & {
   relatedPostsSection?: {
     title?: string;
     relatedPosts?: Array<{
-      _id: string;
+      _id?: string;
+      _ref?: string;
       title?: string;
       slug?: string;
     }>;
@@ -32,28 +52,25 @@ type PostDocument = SanityDocument & {
 const slug = Astro.params.slug;
 const routeProps = Astro.props as Partial<AbRouteProps>;
 const rewrittenPostSlug = Astro.locals.rewrittenPostSlug;
-const rewrittenExperiment = Astro.locals.rewrittenExperiment;
 let postSlug =
   typeof routeProps.postSlug === "string"
     ? routeProps.postSlug
     : rewrittenPostSlug ?? slug;
-let routeContext =
-  resolveAbRouteContext(routeProps) ??
-  (rewrittenExperiment
-    ? {
-        abTestDocId: rewrittenExperiment.abTestDocId,
-        variantCode: rewrittenExperiment.variantCode,
-      }
-    : null);
+let routeContexts = resolveAbRouteContexts(routeProps);
 
-if (slug && !routeContext && !rewrittenPostSlug && !routeProps.postSlug) {
+if (
+  slug &&
+  routeContexts.length === 0 &&
+  !rewrittenPostSlug &&
+  !routeProps.postSlug
+) {
   const abResult = await loadQuery<AbTestRouteSource[]>({
     query: AB_TEST_VARIANT_ROUTES_QUERY,
   });
   const resolvedRoute = resolveAbRouteFromSlug(slug, abResult.data ?? []);
   if (resolvedRoute) {
     postSlug = resolvedRoute.postSlug;
-    routeContext = resolveAbRouteContext(resolvedRoute);
+    routeContexts = resolvedRoute.contexts;
   }
 }
 const middlewareContexts = postSlug
@@ -70,13 +87,19 @@ const middlewareContexts = postSlug
       }),
     )
   : [];
-const abRouteContexts = routeContext
-  ? [routeContext, ...middlewareContexts]
-  : middlewareContexts;
+const abRouteContexts = orderAndDedupeAbRouteContexts([
+  ...routeContexts,
+  ...middlewareContexts,
+]);
 let post: PostDocument | null = null;
 const cacheTags = postSlug ? [`post:${postSlug}`] : [];
 let resolvedRelatedPosts: Array<{ _id: string; title: string; slug: string }> = [];
 let relatedPostsSectionTitle = "Related posts";
+const POSTS_BY_IDS_QUERY = `*[_type == "post" && _id in $ids]{
+  _id,
+  title,
+  "slug": slug.current
+}`;
 
 if (Astro.cache.enabled && cacheTags.length > 0) {
   Astro.cache.set({
@@ -96,17 +119,56 @@ try {
     post = loadedPost ? applyAbVariants(loadedPost, abRouteContexts) : loadedPost;
 
     const relatedPosts = post?.relatedPostsSection?.relatedPosts ?? [];
-    resolvedRelatedPosts = relatedPosts
-      .filter(
-        (relatedPost): relatedPost is { _id: string; title?: string; slug?: string } =>
-          Boolean(relatedPost?._id),
-      )
+    const immediateResolvedPosts = relatedPosts
+      .filter((relatedPost) => Boolean(relatedPost?._id))
       .map((relatedPost) => ({
-        _id: relatedPost._id,
+        _id: relatedPost._id as string,
         title: relatedPost.title?.trim() || "Untitled post",
         slug: relatedPost.slug?.trim() || "",
       }))
       .filter((relatedPost) => relatedPost.slug.length > 0);
+
+    const unresolvedRefIds = relatedPosts
+      .map((relatedPost) => relatedPost?._ref?.trim() || "")
+      .filter((id) => id.length > 0);
+
+    if (unresolvedRefIds.length > 0) {
+      const dedupedRefIds = [...new Set(unresolvedRefIds)];
+      const unresolvedResult = await loadQuery<
+        Array<{ _id?: string; title?: string; slug?: string }>
+      >({
+        query: POSTS_BY_IDS_QUERY,
+        params: { ids: dedupedRefIds },
+      });
+
+      const unresolvedById = new Map(
+        (unresolvedResult.data ?? [])
+          .filter((item) => Boolean(item?._id))
+          .map((item) => [item._id as string, item] as const),
+      );
+
+      const resolvedFromRefs = unresolvedRefIds
+        .map((refId) => unresolvedById.get(refId))
+        .filter((item): item is { _id: string; title?: string; slug?: string } =>
+          Boolean(item?._id),
+        )
+        .map((item) => ({
+          _id: item._id,
+          title: item.title?.trim() || "Untitled post",
+          slug: item.slug?.trim() || "",
+        }))
+        .filter((item) => item.slug.length > 0);
+
+      const mergedById = new Map<string, { _id: string; title: string; slug: string }>();
+      [...immediateResolvedPosts, ...resolvedFromRefs].forEach((item) => {
+        if (!mergedById.has(item._id)) {
+          mergedById.set(item._id, item);
+        }
+      });
+      resolvedRelatedPosts = [...mergedById.values()];
+    } else {
+      resolvedRelatedPosts = immediateResolvedPosts;
+    }
 
     relatedPostsSectionTitle =
       post?.relatedPostsSection?.title?.trim() || "Related posts";
