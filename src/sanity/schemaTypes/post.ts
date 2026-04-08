@@ -55,7 +55,31 @@ export const postType = defineType({
               title: "Meta description",
               type: "string",
             }),
+            defineField({
+              name: "metaKeywords",
+              title: "Meta keywords",
+              type: "array",
+              of: [{ type: "string" }],
+            }),
           ],
+        }),
+      ],
+    }),
+    defineField({
+      name: "relatedPostsSection",
+      title: "Related posts section",
+      type: "object",
+      fields: [
+        defineField({
+          name: "title",
+          title: "Title",
+          type: "string",
+        }),
+        defineField({
+          name: "relatedPosts",
+          title: "Related posts",
+          type: "array",
+          of: [{ type: "reference", to: [{ type: "post" }] }],
         }),
       ],
     }),
