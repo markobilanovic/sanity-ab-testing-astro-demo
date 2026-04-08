@@ -19,6 +19,14 @@ type PostDocument = SanityDocument & {
   title: string;
   body?: unknown[];
   slug?: { current?: string };
+  relatedPostsSection?: {
+    title?: string;
+    relatedPosts?: Array<{
+      _id: string;
+      title?: string;
+      slug?: string;
+    }>;
+  };
 };
 
 const slug = Astro.params.slug;
@@ -67,6 +75,8 @@ const abRouteContexts = routeContext
   : middlewareContexts;
 let post: PostDocument | null = null;
 const cacheTags = postSlug ? [`post:${postSlug}`] : [];
+let resolvedRelatedPosts: Array<{ _id: string; title: string; slug: string }> = [];
+let relatedPostsSectionTitle = "Related posts";
 
 if (Astro.cache.enabled && cacheTags.length > 0) {
   Astro.cache.set({
@@ -84,6 +94,22 @@ try {
     });
     const loadedPost = result.data ?? null;
     post = loadedPost ? applyAbVariants(loadedPost, abRouteContexts) : loadedPost;
+
+    const relatedPosts = post?.relatedPostsSection?.relatedPosts ?? [];
+    resolvedRelatedPosts = relatedPosts
+      .filter(
+        (relatedPost): relatedPost is { _id: string; title?: string; slug?: string } =>
+          Boolean(relatedPost?._id),
+      )
+      .map((relatedPost) => ({
+        _id: relatedPost._id,
+        title: relatedPost.title?.trim() || "Untitled post",
+        slug: relatedPost.slug?.trim() || "",
+      }))
+      .filter((relatedPost) => relatedPost.slug.length > 0);
+
+    relatedPostsSectionTitle =
+      post?.relatedPostsSection?.title?.trim() || "Related posts";
   }
 } catch {
   post = null;
@@ -95,6 +121,18 @@ try {
     <article>
       <h1>{post.title}</h1>
       <PortableText portableText={post.body ?? []} />
+      {resolvedRelatedPosts.length > 0 && (
+        <section>
+          <h2>{relatedPostsSectionTitle}</h2>
+          <ul>
+            {resolvedRelatedPosts.map((relatedPost) => (
+              <li>
+                <a href={`/post/${relatedPost.slug}`}>{relatedPost.title}</a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </article>
   ) : (
     <article>

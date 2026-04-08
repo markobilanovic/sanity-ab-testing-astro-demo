@@ -18,6 +18,14 @@ export const POST_BY_SLUG_QUERY = `*[_type == "post" && slug.current == $slug][0
   title,
   body,
   slug,
+  relatedPostsSection{
+    title,
+    "relatedPosts": relatedPosts[]->{
+      _id,
+      title,
+      "slug": slug.current
+    }
+  },
   showAbVariant,
   abTestRef,
   abVariants
