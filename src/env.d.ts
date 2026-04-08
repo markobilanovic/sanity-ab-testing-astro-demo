@@ -13,12 +13,14 @@ interface ImportMetaEnv {
 
 type AbMiddlewareExperiment =
   import("./sanity/lib/ab-experiments").AbMiddlewareExperiment;
+type AbDocumentType = import("./sanity/lib/ab-routing").AbDocumentType;
 
 declare namespace App {
   interface Locals {
     posthogDistinctId?: string;
-    abExperimentsByPostSlug?: Record<string, AbMiddlewareExperiment[]>;
-    rewrittenPostSlug?: string;
+    abExperimentsByRouteKey?: Record<string, AbMiddlewareExperiment[]>;
+    rewrittenDocumentSlug?: string;
+    rewrittenDocumentType?: AbDocumentType;
     rewrittenExperiment?: AbMiddlewareExperiment;
   }
 }

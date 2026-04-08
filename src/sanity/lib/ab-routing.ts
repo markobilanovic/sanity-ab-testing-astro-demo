@@ -1,4 +1,5 @@
 export const POST_SLUGS_QUERY = `*[_type == "post" && defined(slug.current)].slug.current`;
+export const PAGE_SLUGS_QUERY = `*[_type == "page" && defined(slug.current)].slug.current`;
 
 export const AB_TEST_VARIANT_ROUTES_QUERY = `*[_type == "abTest" && defined(id)]{
   _id,
@@ -6,6 +7,13 @@ export const AB_TEST_VARIANT_ROUTES_QUERY = `*[_type == "abTest" && defined(id)]
   variantCodes,
   "referencedPosts": *[
     _type == "post" &&
+    defined(slug.current) &&
+    references(^._id)
+  ]{
+    slug
+  },
+  "referencedPages": *[
+    _type == "page" &&
     defined(slug.current) &&
     references(^._id)
   ]{
@@ -32,15 +40,27 @@ export const POST_BY_SLUG_QUERY = `*[_type == "post" && slug.current == $slug][0
   abVariants
 }`;
 
+export const PAGE_BY_SLUG_QUERY = `*[_type == "page" && slug.current == $slug][0]{
+  _id,
+  title,
+  body,
+  slug,
+  showAbVariant,
+  abTestRef,
+  abVariants
+}`;
+
 export type AbTestRouteSource = {
   _id?: string;
   id?: string;
   variantCodes?: string[];
   referencedPosts?: Array<{ slug?: { current?: string } }>;
+  referencedPages?: Array<{ slug?: { current?: string } }>;
 };
 
 export type AbRouteProps = {
-  postSlug: string;
+  documentSlug: string;
+  documentType?: AbDocumentType;
   contexts: AbRouteContext[];
 };
 
@@ -55,7 +75,14 @@ const AB_TEST_REF_FIELD_NAME = "abTestRef";
 const COMPOSITE_SEGMENT_SEPARATOR = "--";
 const COMPOSITE_PAIR_SEPARATOR = "-";
 
-type AbPostRouteTest = {
+export type AbDocumentType = "post" | "page";
+
+const AB_TEST_REFERENCES_BY_DOCUMENT_TYPE: Record<AbDocumentType, keyof AbTestRouteSource> = {
+  post: "referencedPosts",
+  page: "referencedPages",
+};
+
+type AbRouteTest = {
   abId: string;
   abTestDocId: string;
   variantCodes: string[];
@@ -80,34 +107,40 @@ function normalizeNonEmptyStrings(values: unknown): string[] {
     .filter((value): value is string => Boolean(value));
 }
 
-export function buildAbPostStaticPaths(
-  postSlugs: string[],
+export function buildAbStaticPaths(
+  documentSlugs: string[],
   abTests: AbTestRouteSource[],
+  documentType: AbDocumentType = "post",
 ): Array<{ params: { slug: string }; props: AbRouteProps }> {
   const staticPaths: Array<{ params: { slug: string }; props: AbRouteProps }> = [];
   const seenRouteSlugs = new Set<string>();
 
-  for (const postSlug of postSlugs) {
-    const normalizedPostSlug = normalizeNonEmptyString(postSlug);
-    if (!normalizedPostSlug || seenRouteSlugs.has(normalizedPostSlug)) {
+  for (const documentSlug of documentSlugs) {
+    const normalizedDocumentSlug = normalizeNonEmptyString(documentSlug);
+    if (!normalizedDocumentSlug || seenRouteSlugs.has(normalizedDocumentSlug)) {
       continue;
     }
 
-    seenRouteSlugs.add(normalizedPostSlug);
+    seenRouteSlugs.add(normalizedDocumentSlug);
     staticPaths.push({
-      params: { slug: normalizedPostSlug },
+      params: { slug: normalizedDocumentSlug },
       props: {
-        postSlug: normalizedPostSlug,
+        documentSlug: normalizedDocumentSlug,
+        documentType,
         contexts: [],
       },
     });
 
-    const postTests = getTestsForPost(normalizedPostSlug, abTests);
-    const routeCombinations = buildCartesianCombinations(postTests);
+    const routeTests = getTestsForDocumentSlug(
+      normalizedDocumentSlug,
+      abTests,
+      documentType,
+    );
+    const routeCombinations = buildCartesianCombinations(routeTests);
 
     for (const routeCombination of routeCombinations) {
-      const routeSlug = serializeCompositePostSlug(
-        normalizedPostSlug,
+      const routeSlug = serializeCompositeSlug(
+        normalizedDocumentSlug,
         routeCombination.segments,
       );
       if (seenRouteSlugs.has(routeSlug)) {
@@ -118,7 +151,8 @@ export function buildAbPostStaticPaths(
       staticPaths.push({
         params: { slug: routeSlug },
         props: {
-          postSlug: normalizedPostSlug,
+          documentSlug: normalizedDocumentSlug,
+          documentType,
           contexts: routeCombination.contexts,
         },
       });
@@ -128,23 +162,10 @@ export function buildAbPostStaticPaths(
   return staticPaths;
 }
 
-export function buildAbContextCombinationsForPost(
-  postSlug: string,
-  abTests: AbTestRouteSource[],
-): Array<{
-  assignments: Array<{ abId: string; variantCode: string }>;
-  contexts: AbRouteContext[];
-}> {
-  const testsForPost = getTestsForPost(postSlug, abTests);
-  return buildCartesianCombinations(testsForPost).map((combination) => ({
-    assignments: combination.segments,
-    contexts: combination.contexts,
-  }));
-}
-
 export function resolveAbRouteFromSlug(
   routeSlug: string,
   abTests: AbTestRouteSource[],
+  documentType: AbDocumentType = "post",
 ): AbRouteProps | null {
   const normalizedRouteSlug = normalizeNonEmptyString(routeSlug);
   if (!normalizedRouteSlug) {
@@ -152,15 +173,20 @@ export function resolveAbRouteFromSlug(
   }
 
   const routeParts = normalizedRouteSlug.split(COMPOSITE_SEGMENT_SEPARATOR);
-  const normalizedPostSlug = normalizeNonEmptyString(routeParts[0]);
-  if (!normalizedPostSlug) {
+  const normalizedDocumentSlug = normalizeNonEmptyString(routeParts[0]);
+  if (!normalizedDocumentSlug) {
     return null;
   }
 
-  const postTests = getTestsForPost(normalizedPostSlug, abTests);
+  const routeTests = getTestsForDocumentSlug(
+    normalizedDocumentSlug,
+    abTests,
+    documentType,
+  );
   if (routeParts.length === 1) {
     return {
-      postSlug: normalizedPostSlug,
+      documentSlug: normalizedDocumentSlug,
+      documentType,
       contexts: [],
     };
   }
@@ -175,7 +201,7 @@ export function resolveAbRouteFromSlug(
       return null;
     }
 
-    const matchingTest = postTests.find((test) =>
+    const matchingTest = routeTests.find((test) =>
       normalizedPart.startsWith(`${test.abId}${COMPOSITE_PAIR_SEPARATOR}`),
     );
     if (!matchingTest) {
@@ -202,13 +228,14 @@ export function resolveAbRouteFromSlug(
     });
   }
 
-  const orderedContexts = orderAndDedupeAbRouteContexts(contexts, postTests);
+  const orderedContexts = orderAndDedupeAbRouteContexts(contexts, routeTests);
   if (orderedContexts.length !== contexts.length) {
     return null;
   }
 
   return {
-    postSlug: normalizedPostSlug,
+    documentSlug: normalizedDocumentSlug,
+    documentType,
     contexts: orderedContexts,
   };
 }
@@ -240,12 +267,12 @@ export function resolveAbRouteContexts(props: Partial<AbRouteProps>): AbRouteCon
   return orderAndDedupeAbRouteContexts(contexts);
 }
 
-export function serializeCompositePostSlug(
-  postSlug: string,
+export function serializeCompositeSlug(
+  documentSlug: string,
   assignments: Array<{ abId: string; variantCode: string }>,
 ): string {
-  const normalizedPostSlug = normalizeNonEmptyString(postSlug);
-  if (!normalizedPostSlug) {
+  const normalizedDocumentSlug = normalizeNonEmptyString(documentSlug);
+  if (!normalizedDocumentSlug) {
     return "";
   }
 
@@ -265,7 +292,7 @@ export function serializeCompositePostSlug(
     .sort((left, right) => left.abId.localeCompare(right.abId));
 
   if (canonicalAssignments.length === 0) {
-    return normalizedPostSlug;
+    return normalizedDocumentSlug;
   }
 
   const seenAbIds = new Set<string>();
@@ -281,12 +308,12 @@ export function serializeCompositePostSlug(
   const routeSegments = uniqueAssignments.map(
     ({ abId, variantCode }) => `${abId}${COMPOSITE_PAIR_SEPARATOR}${variantCode}`,
   );
-  return `${normalizedPostSlug}${COMPOSITE_SEGMENT_SEPARATOR}${routeSegments.join(COMPOSITE_SEGMENT_SEPARATOR)}`;
+  return `${normalizedDocumentSlug}${COMPOSITE_SEGMENT_SEPARATOR}${routeSegments.join(COMPOSITE_SEGMENT_SEPARATOR)}`;
 }
 
 export function orderAndDedupeAbRouteContexts(
   contexts: AbRouteContext[],
-  knownTests: AbPostRouteTest[] = [],
+  knownTests: AbRouteTest[] = [],
 ): AbRouteContext[] {
   const knownAbTestDocIds = new Set(knownTests.map((test) => test.abTestDocId));
   const abTestDocIdOrder = new Map(
@@ -332,16 +359,17 @@ export function orderAndDedupeAbRouteContexts(
   });
 }
 
-export function getTestsForPost(
-  postSlug: string,
+export function getTestsForDocumentSlug(
+  documentSlug: string,
   abTests: AbTestRouteSource[],
-): AbPostRouteTest[] {
-  const normalizedPostSlug = normalizeNonEmptyString(postSlug);
-  if (!normalizedPostSlug) {
+  documentType: AbDocumentType = "post",
+): AbRouteTest[] {
+  const normalizedDocumentSlug = normalizeNonEmptyString(documentSlug);
+  if (!normalizedDocumentSlug) {
     return [];
   }
 
-  const testsForPost: AbPostRouteTest[] = [];
+  const testsForPost: AbRouteTest[] = [];
   for (const abTest of abTests) {
     const abTestDocId = normalizeNonEmptyString(abTest._id);
     const abId = normalizeNonEmptyString(abTest.id);
@@ -354,12 +382,14 @@ export function getTestsForPost(
       continue;
     }
 
-    const referencedPostSlugs = new Set(
+    const referenceField = AB_TEST_REFERENCES_BY_DOCUMENT_TYPE[documentType];
+    const referencedDocumentSlugs = new Set(
       normalizeNonEmptyStrings(
-        (abTest.referencedPosts ?? []).map((post) => post.slug?.current),
+        ((abTest[referenceField] as Array<{ slug?: { current?: string } }> | undefined) ?? [])
+          .map((document) => document.slug?.current),
       ),
     );
-    if (!referencedPostSlugs.has(normalizedPostSlug)) {
+    if (!referencedDocumentSlugs.has(normalizedDocumentSlug)) {
       continue;
     }
 
@@ -374,7 +404,7 @@ export function getTestsForPost(
 }
 
 function buildCartesianCombinations(
-  tests: AbPostRouteTest[],
+  tests: AbRouteTest[],
 ): Array<{
   segments: Array<{ abId: string; variantCode: string }>;
   contexts: AbRouteContext[];

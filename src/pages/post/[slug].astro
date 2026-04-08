@@ -8,7 +8,7 @@ import {
   POST_SLUGS_QUERY,
   POST_BY_SLUG_QUERY,
   applyAbVariants,
-  buildAbPostStaticPaths,
+  buildAbStaticPaths,
   resolveAbRouteFromSlug,
   type AbRouteContext,
   type AbRouteProps,
@@ -28,9 +28,10 @@ export async function getStaticPaths() {
     }),
   ]);
 
-  return buildAbPostStaticPaths(
+  return buildAbStaticPaths(
     postSlugResult.data ?? [],
     abTestsResult.data ?? [],
+    "post",
   );
 }
 
@@ -131,28 +132,28 @@ const resolveRelatedPosts = async (post: PostDocument): Promise<RelatedPost[]> =
 
 const resolvePostSlugAndContexts = async (
   routeSlug: string | undefined,
-  initialPostSlug: string | undefined,
+  initialDocumentSlug: string | undefined,
   initialContexts: AbRouteContext[],
   shouldResolveFromRouteSlug: boolean,
 ): Promise<{
-  postSlug: string | undefined;
+  documentSlug: string | undefined;
   contexts: AbRouteContext[];
 }> => {
   if (!routeSlug || !shouldResolveFromRouteSlug) {
-    return { postSlug: initialPostSlug, contexts: initialContexts };
+    return { documentSlug: initialDocumentSlug, contexts: initialContexts };
   }
 
   const abResult = await loadQuery<AbTestRouteSource[]>({
     query: AB_TEST_VARIANT_ROUTES_QUERY,
   });
-  const resolvedRoute = resolveAbRouteFromSlug(routeSlug, abResult.data ?? []);
+  const resolvedRoute = resolveAbRouteFromSlug(routeSlug, abResult.data ?? [], "post");
 
   if (!resolvedRoute) {
-    return { postSlug: initialPostSlug, contexts: initialContexts };
+    return { documentSlug: initialDocumentSlug, contexts: initialContexts };
   }
 
   return {
-    postSlug: resolvedRoute.postSlug,
+    documentSlug: resolvedRoute.documentSlug,
     contexts: resolvedRoute.contexts,
   };
 };
@@ -162,18 +163,20 @@ const routeProps = Astro.props as Partial<AbRouteProps>;
 const routeState = resolveAbRouteStateForRequest({
   routeSlug: slug,
   routeProps,
-  rewrittenPostSlug: Astro.locals.rewrittenPostSlug,
-  abExperimentsByPostSlug: Astro.locals.abExperimentsByPostSlug,
+  rewrittenDocumentSlug: Astro.locals.rewrittenDocumentSlug,
+  rewrittenDocumentType: Astro.locals.rewrittenDocumentType,
+  defaultDocumentType: "post",
+  abExperimentsByRouteKey: Astro.locals.abExperimentsByRouteKey,
 });
 
 const resolvedRoute = await resolvePostSlugAndContexts(
   slug,
-  routeState.postSlug,
+  routeState.documentSlug,
   routeState.contexts,
   routeState.shouldResolveFromRouteSlug,
 );
 
-const postSlug = resolvedRoute.postSlug;
+const postSlug = resolvedRoute.documentSlug;
 const abRouteContexts = resolvedRoute.contexts;
 
 let post: PostDocument | null = null;

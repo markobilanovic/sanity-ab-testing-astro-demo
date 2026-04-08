@@ -1,0 +1,128 @@
+---
+import type { SanityDocument } from "@sanity/client";
+import Layout from "../layouts/Layout.astro";
+import PortableText from "../components/PortableText.astro";
+import { loadQuery } from "../sanity/lib/load-query";
+import {
+  AB_TEST_VARIANT_ROUTES_QUERY,
+  PAGE_BY_SLUG_QUERY,
+  PAGE_SLUGS_QUERY,
+  applyAbVariants,
+  buildAbStaticPaths,
+  resolveAbRouteFromSlug,
+  type AbRouteContext,
+  type AbRouteProps,
+  type AbTestRouteSource,
+} from "../sanity/lib/ab-routing";
+import { resolveAbRouteStateForRequest } from "../sanity/lib/ab-experiments";
+
+export const prerender = true;
+
+export async function getStaticPaths() {
+  const [pageSlugResult, abTestsResult] = await Promise.all([
+    loadQuery<string[]>({
+      query: PAGE_SLUGS_QUERY,
+    }),
+    loadQuery<AbTestRouteSource[]>({
+      query: AB_TEST_VARIANT_ROUTES_QUERY,
+    }),
+  ]);
+
+  return buildAbStaticPaths(pageSlugResult.data ?? [], abTestsResult.data ?? [], "page");
+}
+
+type PageDocument = SanityDocument & {
+  title: string;
+  body?: unknown[];
+  slug?: { current?: string };
+};
+
+const resolvePageSlugAndContexts = async (
+  routeSlug: string | undefined,
+  initialDocumentSlug: string | undefined,
+  initialContexts: AbRouteContext[],
+  shouldResolveFromRouteSlug: boolean,
+): Promise<{
+  documentSlug: string | undefined;
+  contexts: AbRouteContext[];
+}> => {
+  if (!routeSlug || !shouldResolveFromRouteSlug) {
+    return { documentSlug: initialDocumentSlug, contexts: initialContexts };
+  }
+
+  const abResult = await loadQuery<AbTestRouteSource[]>({
+    query: AB_TEST_VARIANT_ROUTES_QUERY,
+  });
+  const resolvedRoute = resolveAbRouteFromSlug(routeSlug, abResult.data ?? [], "page");
+
+  if (!resolvedRoute) {
+    return { documentSlug: initialDocumentSlug, contexts: initialContexts };
+  }
+
+  return {
+    documentSlug: resolvedRoute.documentSlug,
+    contexts: resolvedRoute.contexts,
+  };
+};
+
+const slug = Astro.params.slug;
+const routeProps = Astro.props as Partial<AbRouteProps>;
+const routeState = resolveAbRouteStateForRequest({
+  routeSlug: slug,
+  routeProps,
+  rewrittenDocumentSlug: Astro.locals.rewrittenDocumentSlug,
+  rewrittenDocumentType: Astro.locals.rewrittenDocumentType,
+  defaultDocumentType: "page",
+  abExperimentsByRouteKey: Astro.locals.abExperimentsByRouteKey,
+});
+
+const resolvedRoute = await resolvePageSlugAndContexts(
+  slug,
+  routeState.documentSlug,
+  routeState.contexts,
+  routeState.shouldResolveFromRouteSlug,
+);
+
+const pageSlug = resolvedRoute.documentSlug;
+const abRouteContexts = resolvedRoute.contexts;
+
+let page: PageDocument | null = null;
+const cacheTags = pageSlug ? [`page:${pageSlug}`] : [];
+
+if (Astro.cache.enabled && cacheTags.length > 0) {
+  Astro.cache.set({
+    maxAge: 300,
+    swr: 900,
+    tags: cacheTags,
+  });
+}
+
+try {
+  if (pageSlug) {
+    const result = await loadQuery<PageDocument>({
+      query: PAGE_BY_SLUG_QUERY,
+      params: { slug: pageSlug },
+    });
+    const loadedPage = result.data ?? null;
+    page = loadedPage ? applyAbVariants(loadedPage, abRouteContexts) : loadedPage;
+  }
+} catch {
+  page = null;
+}
+---
+
+<Layout title={page?.title ?? "Page not found"}>
+  {page ? (
+    <article>
+      <h1>{page.title}</h1>
+      <PortableText portableText={page.body ?? []} />
+    </article>
+  ) : (
+    <article>
+      <h1>Page not found</h1>
+      <p>
+        Either the slug does not exist, or Sanity is not configured yet in `.env`.
+      </p>
+    </article>
+  )}
+</Layout>

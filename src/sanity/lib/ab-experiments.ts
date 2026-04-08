@@ -1,4 +1,5 @@
 import type {
+  AbDocumentType,
   AbRouteContext,
   AbRouteProps,
   AbTestRouteSource,
@@ -16,15 +17,39 @@ export type AbMiddlewareExperiment = {
 type AbRouteStateInput = {
   routeSlug?: string;
   routeProps?: Partial<AbRouteProps>;
-  rewrittenPostSlug?: string;
-  abExperimentsByPostSlug?: Record<string, AbMiddlewareExperiment[]>;
+  rewrittenDocumentSlug?: string;
+  rewrittenDocumentType?: AbDocumentType;
+  defaultDocumentType: AbDocumentType;
+  abExperimentsByRouteKey?: Record<string, AbMiddlewareExperiment[]>;
 };
 
 type AbRouteState = {
-  postSlug?: string;
+  documentSlug?: string;
+  documentType: AbDocumentType;
   contexts: AbRouteContext[];
   shouldResolveFromRouteSlug: boolean;
 };
+
+type AbRouteRequestTarget = {
+  documentType: AbDocumentType;
+  requestedSlug: string;
+};
+
+const AB_DOCUMENT_TYPES: AbDocumentType[] = ["post", "page"];
+const AB_TEST_REFERENCE_FIELD_BY_TYPE: Record<AbDocumentType, keyof AbTestRouteSource> = {
+  post: "referencedPosts",
+  page: "referencedPages",
+};
+const RESERVED_ROOT_SEGMENTS = new Set([
+  "post",
+  "studio",
+  "api",
+  "_astro",
+  "favicon.ico",
+  "robots.txt",
+  "sitemap.xml",
+  "sitemap-index.xml",
+]);
 
 export function normalizeNonEmptyString(value: unknown): string | null {
   if (typeof value !== "string") {
@@ -90,11 +115,15 @@ export function getActiveFeatureFlags(
   return activeFlags;
 }
 
-export function buildAbExperimentsByPostSlug(
+export function buildRouteKey(documentType: AbDocumentType, slug: string): string {
+  return `${documentType}:${slug}`;
+}
+
+export function buildAbExperimentsByRouteKey(
   abTests: AbTestRouteSource[],
   featureFlags: AbFeatureFlags,
 ): Record<string, AbMiddlewareExperiment[]> {
-  const byPostSlug: Record<string, AbMiddlewareExperiment[]> = {};
+  const byRouteKey: Record<string, AbMiddlewareExperiment[]> = {};
 
   for (const abTest of abTests) {
     const abTestDocId = normalizeNonEmptyString(abTest._id);
@@ -113,47 +142,72 @@ export function buildAbExperimentsByPostSlug(
       continue;
     }
 
-    const referencedPostSlugs = normalizeNonEmptyStrings(
-      (abTest.referencedPosts ?? []).map((post) => post.slug?.current),
-    );
-    if (referencedPostSlugs.length === 0) {
-      continue;
-    }
+    for (const documentType of AB_DOCUMENT_TYPES) {
+      const referenceField = AB_TEST_REFERENCE_FIELD_BY_TYPE[documentType];
+      const referencedDocumentSlugs = normalizeNonEmptyStrings(
+        ((abTest[referenceField] as Array<{ slug?: { current?: string } }> | undefined) ?? [])
+          .map((document) => document.slug?.current),
+      );
+      if (referencedDocumentSlugs.length === 0) {
+        continue;
+      }
 
-    for (const postSlug of referencedPostSlugs) {
-      byPostSlug[postSlug] ??= [];
-      byPostSlug[postSlug].push({
-        abId,
-        abTestDocId,
-        variantCode: assignedVariant,
-      });
+      for (const documentSlug of referencedDocumentSlugs) {
+        const routeKey = buildRouteKey(documentType, documentSlug);
+        byRouteKey[routeKey] ??= [];
+        byRouteKey[routeKey].push({
+          abId,
+          abTestDocId,
+          variantCode: assignedVariant,
+        });
+      }
     }
   }
 
-  return byPostSlug;
+  return byRouteKey;
 }
 
-export function getRequestedPostSlug(pathname: string): string | null {
-  const match = /^\/post\/([^/]+)\/?$/.exec(pathname);
-  if (!match) {
+export function getRequestedAbRoute(pathname: string): AbRouteRequestTarget | null {
+  const postMatch = /^\/post\/([^/]+)\/?$/.exec(pathname);
+  if (postMatch) {
+    try {
+      return {
+        documentType: "post",
+        requestedSlug: decodeURIComponent(postMatch[1]),
+      };
+    } catch {
+      return { documentType: "post", requestedSlug: postMatch[1] };
+    }
+  }
+
+  const pageMatch = /^\/([^/]+)\/?$/.exec(pathname);
+  if (!pageMatch) {
+    return null;
+  }
+
+  const pageSegment = pageMatch[1];
+  if (!pageSegment || RESERVED_ROOT_SEGMENTS.has(pageSegment) || pageSegment.includes(".")) {
     return null;
   }
 
   try {
-    return decodeURIComponent(match[1]);
+    return {
+      documentType: "page",
+      requestedSlug: decodeURIComponent(pageSegment),
+    };
   } catch {
-    return match[1];
+    return { documentType: "page", requestedSlug: pageSegment };
   }
 }
 
-export function getCanonicalPostSlug(routeSlug: string): string | null {
+export function getCanonicalDocumentSlug(routeSlug: string): string | null {
   const normalizedRouteSlug = normalizeNonEmptyString(routeSlug);
   if (!normalizedRouteSlug) {
     return null;
   }
 
-  const canonicalPostSlug = normalizedRouteSlug.split("--")[0];
-  return normalizeNonEmptyString(canonicalPostSlug);
+  const canonicalDocumentSlug = normalizedRouteSlug.split("--")[0];
+  return normalizeNonEmptyString(canonicalDocumentSlug);
 }
 
 export function toAbRouteContexts(
@@ -170,24 +224,30 @@ export function toAbRouteContexts(
 export function resolveAbRouteStateForRequest({
   routeSlug,
   routeProps,
-  rewrittenPostSlug,
-  abExperimentsByPostSlug,
+  rewrittenDocumentSlug,
+  rewrittenDocumentType,
+  defaultDocumentType,
+  abExperimentsByRouteKey,
 }: AbRouteStateInput): AbRouteState {
   const canonicalRouteSlug = normalizeNonEmptyString(routeSlug) ?? undefined;
-  const canonicalPropPostSlug =
-    normalizeNonEmptyString(routeProps?.postSlug) ?? undefined;
-  const canonicalRewrittenPostSlug =
-    normalizeNonEmptyString(rewrittenPostSlug) ?? undefined;
+  const canonicalPropDocumentSlug = normalizeNonEmptyString(routeProps?.documentSlug) ?? undefined;
+  const canonicalRewrittenDocumentSlug =
+    normalizeNonEmptyString(rewrittenDocumentSlug) ?? undefined;
+  const documentType =
+    routeProps?.documentType ?? rewrittenDocumentType ?? defaultDocumentType;
 
-  const postSlug =
-    canonicalPropPostSlug ?? canonicalRewrittenPostSlug ?? canonicalRouteSlug;
+  const documentSlug =
+    canonicalPropDocumentSlug ?? canonicalRewrittenDocumentSlug ?? canonicalRouteSlug;
   const routeContexts = resolveAbRouteContexts(routeProps ?? {});
-  const middlewareContexts = postSlug
-    ? toAbRouteContexts(abExperimentsByPostSlug?.[postSlug] ?? [])
+  const middlewareContexts = documentSlug
+    ? toAbRouteContexts(
+        abExperimentsByRouteKey?.[buildRouteKey(documentType, documentSlug)] ?? [],
+      )
     : [];
 
   return {
-    postSlug,
+    documentSlug,
+    documentType,
     contexts: orderAndDedupeAbRouteContexts([
       ...routeContexts,
       ...middlewareContexts,
@@ -195,8 +255,8 @@ export function resolveAbRouteStateForRequest({
     shouldResolveFromRouteSlug: Boolean(
       canonicalRouteSlug &&
         routeContexts.length === 0 &&
-        !canonicalRewrittenPostSlug &&
-        !canonicalPropPostSlug,
+        !canonicalRewrittenDocumentSlug &&
+        !canonicalPropDocumentSlug,
     ),
   };
 }

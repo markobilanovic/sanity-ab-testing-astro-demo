@@ -9,10 +9,12 @@ active PostHog feature flags.
 - **Sanity authoring with AB cloning:** the Studio plugin in `src/sanity/plugins`
   injects AB fields into document/object schemas so editors can define per-variant
   content copies.
-- **Static generation of variant routes:** `src/pages/post/[slug].astro` builds all
-  valid route combinations (base post + AB variants) during `getStaticPaths`.
+- **Static generation of variant routes:** `src/pages/post/[slug].astro` and
+  `src/pages/[slug].astro` build all valid route combinations (base document + AB
+  variants) during `getStaticPaths`.
 - **Runtime assignment via PostHog:** `src/middleware.ts` reads user flags and
-  rewrites `/post/:slug` to the matching composite variant route.
+  rewrites `/post/:slug` and root-level `/:slug` page routes to matching composite
+  variant routes.
 - **Variant content application:** `src/sanity/lib/ab-routing.ts` applies selected
   variant payloads recursively to the loaded Sanity document tree.
 

@@ -2,15 +2,15 @@ import { defineMiddleware } from "astro:middleware";
 import { PostHog } from "posthog-node";
 import {
   AB_TEST_VARIANT_ROUTES_QUERY,
-  serializeCompositePostSlug,
+  serializeCompositeSlug,
   type AbTestRouteSource,
 } from "./sanity/lib/ab-routing";
 import {
-  buildAbExperimentsByPostSlug,
+  buildAbExperimentsByRouteKey,
   extractFeatureFlags,
   getActiveFeatureFlags,
-  getCanonicalPostSlug,
-  getRequestedPostSlug,
+  getCanonicalDocumentSlug,
+  getRequestedAbRoute,
 } from "./sanity/lib/ab-experiments";
 import { loadQuery } from "./sanity/lib/load-query";
 
@@ -62,7 +62,7 @@ async function getAbTests(): Promise<AbTestRouteSource[]> {
 export const onRequest = defineMiddleware(async (context, next) => {
   const client = getPosthogClient();
   if (!client) {
-    context.locals.abExperimentsByPostSlug = {};
+    context.locals.abExperimentsByRouteKey = {};
     return next();
   }
 
@@ -92,58 +92,63 @@ export const onRequest = defineMiddleware(async (context, next) => {
       distinctId,
       activeFeatureFlags,
     });
-    context.locals.abExperimentsByPostSlug = buildAbExperimentsByPostSlug(
+    context.locals.abExperimentsByRouteKey = buildAbExperimentsByRouteKey(
       abTests,
       featureFlags,
     );
 
-    const requestedPostSlug = getRequestedPostSlug(context.url.pathname);
-    if (!requestedPostSlug) {
+    const requestedRoute = getRequestedAbRoute(context.url.pathname);
+    if (!requestedRoute) {
       return next();
     }
 
-    const canonicalPostSlug = getCanonicalPostSlug(requestedPostSlug);
-    if (!canonicalPostSlug) {
+    const canonicalDocumentSlug = getCanonicalDocumentSlug(requestedRoute.requestedSlug);
+    if (!canonicalDocumentSlug) {
       return next();
     }
 
+    const routeKey = `${requestedRoute.documentType}:${canonicalDocumentSlug}`;
     const assignedExperiments =
-      context.locals.abExperimentsByPostSlug[canonicalPostSlug] ?? [];
+      context.locals.abExperimentsByRouteKey[routeKey] ?? [];
     if (assignedExperiments.length === 0) {
       return next();
     }
 
-    const rewrittenSlug = serializeCompositePostSlug(
-      canonicalPostSlug,
+    const rewrittenSlug = serializeCompositeSlug(
+      canonicalDocumentSlug,
       assignedExperiments.map(({ abId, variantCode }) => ({
         abId,
         variantCode,
       })),
     );
-    if (!rewrittenSlug || rewrittenSlug === requestedPostSlug) {
+    if (!rewrittenSlug || rewrittenSlug === requestedRoute.requestedSlug) {
       return next();
     }
 
-    const rewrittenPath = `/post/${encodeURIComponent(rewrittenSlug)}`;
+    const encodedSlug = encodeURIComponent(rewrittenSlug);
+    const rewrittenPath =
+      requestedRoute.documentType === "post" ? `/post/${encodedSlug}` : `/${encodedSlug}`;
     if (rewrittenPath === context.url.pathname) {
       return next();
     }
 
-    context.locals.rewrittenPostSlug = canonicalPostSlug;
+    context.locals.rewrittenDocumentSlug = canonicalDocumentSlug;
+    context.locals.rewrittenDocumentType = requestedRoute.documentType;
 
     const rewrittenUrl = new URL(context.url);
     rewrittenUrl.pathname = rewrittenPath;
 
-    console.info("[middleware][posthog] rewriting post url", {
+    console.info("[middleware][posthog] rewriting route", {
       from: context.url.pathname,
       to: rewrittenPath,
+      documentType: requestedRoute.documentType,
       distinctId,
       experiments: assignedExperiments,
     });
 
     return context.rewrite(rewrittenUrl);
   } catch {
-    context.locals.abExperimentsByPostSlug = {};
+    context.locals.abExperimentsByRouteKey = {};
   }
 
   return next();
