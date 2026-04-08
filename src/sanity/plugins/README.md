@@ -1,6 +1,17 @@
-# Sanity AB Plugin
+# Sanity AB Plugins
 
-`abObjectCloning()` adds AB authoring controls to object/document schema types.
+`abObjectCloning()` adds AB authoring controls to object and document schema types.
+
+## Folder Structure
+
+The plugin code is split by concern so each area can evolve independently:
+
+- `ab-object-cloning/`: plugin composition, schema registration, adapter + revalidation integration.
+- `ab-object-customizer/`: custom object input renderer and AB variant dialog state/behavior.
+- `composed-object-input/`: reusable input composition layer for field customizers.
+- `abConfig.ts`: shared constants and name/label override resolvers.
+- `withAbObject.ts`: schema transformation utility that injects AB fields.
+- `abObjectCloning.tsx`, `abObjectCustomizer.tsx`, `ComposedObjectInput.tsx`: compatibility entry points that re-export from new folders.
 
 ## Install in Studio
 
@@ -8,7 +19,6 @@
 import { abObjectCloning } from "./src/sanity/plugins/abObjectCloning";
 
 export default defineConfig({
-  // ...
   plugins: [
     abObjectCloning({
       posthog: {
@@ -17,38 +27,39 @@ export default defineConfig({
         personalApiKey: process.env.SANITY_STUDIO_POSTHOG_PERSONAL_API_KEY,
       },
       revalidation: {
-        documentTypes: ["post"],
         endpointPath: "/api/revalidate",
+        documents: [
+          {
+            type: "post",
+            pathPrefix: "post",
+            tagPrefix: "post",
+          },
+        ],
       },
     }),
   ],
 });
 ```
 
-## Options
+## Plugin Options
 
-- `adapter`: Custom feature-flag source for AB test IDs.
-- `posthog`: Built-in adapter config (used when `adapter` is not provided).
+- `adapter`: custom feature-flag source for AB test IDs.
+- `posthog`: built-in adapter config (used when `adapter` is not provided).
 - `abTestTypeName`: AB test document type name (default: `abTest`).
-- `fieldNames`: Override AB control field names (defaults include `showAbVariant`, `abTestRef`, `abVariants`).
-- `revalidation`: Optional publish hook config. No revalidation runs unless this is configured.
-  - `documentTypes`: Document types that trigger revalidation.
-  - `endpointPath`: Relative endpoint path to call from Studio.
-  - `secretEnvVar`: Optional Studio env var name carrying a revalidation secret.
-  - `delayMs`: Delay before request to reduce publish/read race conditions.
-  - `tagPrefix` and `pathPrefix`: Prefixes used to build invalidation payloads.
+- `fieldNames`: override AB control field names (`showAbVariant`, `abTestRef`, `abVariants`, ...).
+- `revalidation`: optional publish hook config. No revalidation runs unless this is configured.
+  - `documents`: list of per-document-type revalidation configs (`type`, optional `pathPrefix`, optional `tagPrefix`).
+  - `endpointPath`: relative endpoint path called from Studio.
+  - `secretEnvVar`: optional Studio env var name for a revalidation secret.
+  - `delayMs`: delay before request to reduce publish/read race conditions.
 
 ## AB Field Shape
 
-The plugin injects these fields into AB-enabled object/document containers:
+Fields injected into AB-enabled object/document containers:
 
 - `showAbVariant`: boolean toggle
-- `abTestRef`: reference to the AB test document
+- `abTestRef`: reference to AB test document
 - `abVariants`: array of variant entries
-  - `abTestName`: readonly label
-  - `variantCode`: readonly variant key
+  - `abTestName`: read-only label
+  - `variantCode`: read-only variant key
   - `variant`: cloned object payload matching the base object shape
-
-## Migration Note
-
-Revalidation is now opt-in. If you relied on the old implicit publish revalidation behavior, add `revalidation` in your plugin options.
