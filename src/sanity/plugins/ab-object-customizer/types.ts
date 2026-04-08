@@ -1,3 +1,5 @@
+import type { AbFieldNames } from "../abConfig";
+
 export type AbTestDocument = {
   _id: string;
   name?: string;

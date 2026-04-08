@@ -1,5 +1,7 @@
 import type { ObjectInputProps } from "sanity";
-import type { AbFieldNameOverrides } from "../abConfig";
+import type { AbFieldNameOverrides, AbFieldNames } from "../abConfig";
+
+export type { AbFieldNames } from "../abConfig";
 
 export type AbFeatureFlag = {
   id: string;
@@ -57,9 +59,5 @@ export type PostDocumentLike = {
   _id?: string;
   slug?: { current?: string };
 };
-
-export type AbFieldNames = ReturnType<
-  typeof import("../abConfig").resolveAbFieldNames
->;
 
 export type ObjectMembers = ObjectInputProps["members"];
