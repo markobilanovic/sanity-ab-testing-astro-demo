@@ -1,6 +1,7 @@
 export const DEFAULT_AB_TEST_TYPE_NAME = "abTest";
 export const AB_CONFIG_ACTION_EVENT_NAME = "abObjectCloning:openConfigDialog";
 export const AB_INTERNAL_OPTION = "__abInternal";
+export const AB_SELECTED_VARIANT_FIELDS_FIELD_NAME = "abSelectedVariantFields";
 export const AB_VARIANTS_DISABLE_ACTIONS = [
   "add",
   "addBefore",

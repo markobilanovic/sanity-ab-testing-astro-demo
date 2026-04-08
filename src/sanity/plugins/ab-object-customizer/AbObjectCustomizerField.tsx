@@ -1,5 +1,5 @@
-import { useEffect, useMemo } from "react";
-import { Button, Flex, Stack, Text } from "@sanity/ui";
+import { useEffect, useMemo, useState } from "react";
+import { Button, Dialog, Flex, Stack, Text } from "@sanity/ui";
 import {
   MemberField,
   PatchEvent,
@@ -11,6 +11,7 @@ import {
 } from "sanity";
 import {
   AB_CONFIG_ACTION_EVENT_NAME,
+  AB_SELECTED_VARIANT_FIELDS_FIELD_NAME,
   DEFAULT_STUDIO_API_VERSION,
   type AbFieldNames,
 } from "../abConfig";
@@ -28,6 +29,14 @@ type AbObjectCustomizerFieldProps = {
   props: ObjectInputProps;
   fieldNames: AbFieldNames;
   abTestTypeName: string;
+};
+
+type FieldActionResultDialogState = {
+  kind: "success" | "info";
+  fieldName: string;
+  abTestName: string;
+  updatedVariantsCount: number;
+  totalVariantsCount: number;
 };
 
 export function AbObjectCustomizerField({
@@ -67,6 +76,22 @@ export function AbObjectCustomizerField({
     () => getControlVariantSeed(valueRecord, fieldNames),
     [fieldNames, valueRecord],
   );
+  const [selectedFieldName, setSelectedFieldName] = useState<string | null>(null);
+  const [fieldActionResultDialog, setFieldActionResultDialog] =
+    useState<FieldActionResultDialogState | null>(null);
+  const variantSeed = useMemo(() => {
+    if (!selectedFieldName) {
+      return controlVariantSeed;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(controlVariantSeed, selectedFieldName)) {
+      return {};
+    }
+
+    return cloneValue({
+      [selectedFieldName]: controlVariantSeed[selectedFieldName],
+    });
+  }, [controlVariantSeed, selectedFieldName]);
   const shouldShowAbVariant = Boolean(
     valueRecord &&
       typeof valueRecord[fieldNames.toggle] === "boolean" &&
@@ -110,6 +135,7 @@ export function AbObjectCustomizerField({
     const handleOpenConfigDialog = (event: Event) => {
       const customEvent = event as CustomEvent<{
         targetPath?: unknown;
+        selectedFieldName?: unknown;
       }>;
 
       const eventTargetPath = customEvent.detail?.targetPath;
@@ -117,6 +143,89 @@ export function AbObjectCustomizerField({
         return;
       }
 
+      const eventSelectedFieldName = customEvent.detail?.selectedFieldName;
+      const selectedField =
+        typeof eventSelectedFieldName === "string" ? eventSelectedFieldName : null;
+
+      // Field-level action on an already configured AB object should extend existing
+      // variants directly, without reopening AB test selection.
+      if (selectedField && shouldShowAbVariant && currentVariants.length > 0) {
+        let hasChanges = false;
+        let updatedVariantsCount = 0;
+        const nextVariants: AbVariantItem[] = currentVariants.map((item) => {
+          const variantRecord =
+            item.variant && typeof item.variant === "object"
+              ? (cloneValue(item.variant) as Record<string, unknown>)
+              : {};
+          let variantChanged = false;
+
+          const selectedFields = variantRecord[
+            AB_SELECTED_VARIANT_FIELDS_FIELD_NAME
+          ] as unknown;
+          const selectedFieldSet = Array.isArray(selectedFields)
+            ? new Set(
+                selectedFields.filter(
+                  (value): value is string =>
+                    typeof value === "string" && Boolean(value.trim()),
+                ),
+              )
+            : new Set(
+                Object.keys(variantRecord).filter(
+                  (fieldName) => fieldName !== AB_SELECTED_VARIANT_FIELDS_FIELD_NAME,
+                ),
+              );
+
+          if (!selectedFieldSet.has(selectedField)) {
+            selectedFieldSet.add(selectedField);
+            hasChanges = true;
+            variantChanged = true;
+          }
+
+          if (
+            !Object.prototype.hasOwnProperty.call(variantRecord, selectedField) &&
+            Object.prototype.hasOwnProperty.call(controlVariantSeed, selectedField)
+          ) {
+            variantRecord[selectedField] = cloneValue(controlVariantSeed[selectedField]);
+            hasChanges = true;
+            variantChanged = true;
+          }
+
+          variantRecord[AB_SELECTED_VARIANT_FIELDS_FIELD_NAME] =
+            Array.from(selectedFieldSet);
+          if (variantChanged) {
+            updatedVariantsCount += 1;
+          }
+
+          return {
+            ...item,
+            variant: variantRecord,
+          };
+        });
+
+        if (hasChanges) {
+          onChange(PatchEvent.from([set(nextVariants, [fieldNames.variants])]));
+          setFieldActionResultDialog({
+            kind: "success",
+            fieldName: selectedField,
+            abTestName: currentExperimentName || currentAbTestRef || "unknown AB test",
+            updatedVariantsCount,
+            totalVariantsCount: currentVariants.length,
+          });
+        } else {
+          setFieldActionResultDialog({
+            kind: "info",
+            fieldName: selectedField,
+            abTestName: currentExperimentName || currentAbTestRef || "unknown AB test",
+            updatedVariantsCount: 0,
+            totalVariantsCount: currentVariants.length,
+          });
+        }
+        return;
+      }
+
+      setSelectedFieldName(
+        selectedField,
+      );
       void openDialog();
     };
 
@@ -131,7 +240,15 @@ export function AbObjectCustomizerField({
         handleOpenConfigDialog as EventListener,
       );
     };
-  }, [openDialog, props.path]);
+  }, [
+    controlVariantSeed,
+    currentVariants,
+    fieldNames.variants,
+    onChange,
+    openDialog,
+    props.path,
+    shouldShowAbVariant,
+  ]);
 
   const handleEnableAbVariantWithSelection = () => {
     if (!selectedAbTestId || variantCodes.length === 0) {
@@ -143,7 +260,12 @@ export function AbObjectCustomizerField({
       _type: fieldNames.variantEntryType,
       abTestName: selectedAbTestName,
       variantCode: code,
-      variant: cloneValue(controlVariantSeed),
+      variant: {
+        ...cloneValue(variantSeed),
+        [AB_SELECTED_VARIANT_FIELDS_FIELD_NAME]: selectedFieldName
+          ? [selectedFieldName]
+          : undefined,
+      },
     }));
 
     onChange(
@@ -160,6 +282,11 @@ export function AbObjectCustomizerField({
         set(variants, [fieldNames.variants]),
       ]),
     );
+    handleCloseDialog();
+  };
+
+  const handleCloseDialog = () => {
+    setSelectedFieldName(null);
     closeDialog();
   };
 
@@ -214,10 +341,53 @@ export function AbObjectCustomizerField({
         selectedAbTestId={selectedAbTestId}
         selectedAbTestVariantCount={selectedAbTestVariantCount}
         variantCodesCount={variantCodes.length}
-        onClose={closeDialog}
+        onClose={handleCloseDialog}
         onConfirm={handleEnableAbVariantWithSelection}
         onSelectAbTest={selectAbTest}
       />
+
+      {fieldActionResultDialog ? (
+        <Dialog
+          id="ab-field-action-result-dialog"
+          header={
+            fieldActionResultDialog.kind === "success"
+              ? "Field added to AB variants"
+              : "Field already present in AB variants"
+          }
+          onClose={() => setFieldActionResultDialog(null)}
+          width={1}
+          footer={
+            <Flex justify="flex-end">
+              <Button
+                mode="default"
+                tone="primary"
+                text="OK"
+                onClick={() => setFieldActionResultDialog(null)}
+              />
+            </Flex>
+          }
+        >
+          <Stack padding={4} space={3}>
+            <Text size={1}>
+              AB test: {fieldActionResultDialog.abTestName}
+            </Text>
+            {fieldActionResultDialog.kind === "success" ? (
+              <Text size={1}>
+                Field "{fieldActionResultDialog.fieldName}" was added to{" "}
+                {fieldActionResultDialog.updatedVariantsCount} of{" "}
+                {fieldActionResultDialog.totalVariantsCount} variant clone
+                {fieldActionResultDialog.totalVariantsCount === 1 ? "" : "s"}.
+              </Text>
+            ) : (
+              <Text size={1}>
+                Field "{fieldActionResultDialog.fieldName}" already exists in all{" "}
+                {fieldActionResultDialog.totalVariantsCount} variant clone
+                {fieldActionResultDialog.totalVariantsCount === 1 ? "" : "s"}.
+              </Text>
+            )}
+          </Stack>
+        </Dialog>
+      ) : null}
     </Stack>
   );
 }

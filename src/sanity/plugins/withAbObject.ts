@@ -1,5 +1,6 @@
 import {
   AB_INTERNAL_OPTION,
+  AB_SELECTED_VARIANT_FIELDS_FIELD_NAME,
   AB_VARIANTS_DISABLE_ACTIONS,
   DEFAULT_AB_TEST_TYPE_NAME,
   resolveAbFieldLabels,
@@ -17,6 +18,45 @@ type AnyField = Record<string, unknown> & {
   of?: AnyField[];
   options?: unknown;
 };
+
+function decorateVariantFieldsWithSelectionVisibility(fields: AnyField[]): AnyField[] {
+  return fields.map((field) => {
+    const decorated = { ...field };
+    const existingHidden = field.hidden;
+
+    decorated.hidden = (context: { parent?: unknown }) => {
+      const parent = context.parent as Record<string, unknown> | undefined;
+      const selectedFields = parent?.[
+        AB_SELECTED_VARIANT_FIELDS_FIELD_NAME
+      ] as unknown;
+      const selectedFieldSet = Array.isArray(selectedFields)
+        ? new Set(
+            selectedFields.filter(
+              (value): value is string => typeof value === "string" && Boolean(value),
+            ),
+          )
+        : null;
+
+      const isHiddenBySelection =
+        selectedFieldSet !== null &&
+        typeof field.name === "string" &&
+        !selectedFieldSet.has(field.name);
+
+      const isHiddenByExistingRule =
+        typeof existingHidden === "function"
+          ? Boolean(existingHidden(context))
+          : Boolean(existingHidden);
+
+      return isHiddenBySelection || isHiddenByExistingRule;
+    };
+
+    if (Array.isArray(field.fields)) {
+      decorated.fields = decorateVariantFieldsWithSelectionVisibility(field.fields);
+    }
+
+    return decorated;
+  });
+}
 
 export type WithAbObjectOptions = {
   abTestTypeName?: string;
@@ -76,6 +116,19 @@ function createAbVariantsField(
 ): AnyField {
   const fieldNames = resolveAbFieldNames(options.fieldNames);
   const labels = resolveAbFieldLabels(options.labels);
+  const variantFields: AnyField[] = [
+    {
+      name: AB_SELECTED_VARIANT_FIELDS_FIELD_NAME,
+      type: "array",
+      of: [{ type: "string" }],
+      hidden: true,
+      readOnly: true,
+      options: {
+        [AB_INTERNAL_OPTION]: true,
+      },
+    },
+    ...decorateVariantFieldsWithSelectionVisibility(fields),
+  ];
 
   return {
     name: fieldNames.variants,
@@ -124,7 +177,7 @@ function createAbVariantsField(
             options: {
               [AB_INTERNAL_OPTION]: true,
             },
-            fields,
+            fields: variantFields,
           },
         ],
       },
