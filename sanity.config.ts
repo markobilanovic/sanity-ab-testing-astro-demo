@@ -37,7 +37,7 @@ const abPluginOptions: AbObjectCloningOptions = {
     personalApiKey: readStudioEnv("SANITY_STUDIO_POSTHOG_PERSONAL_API_KEY"),
   },
   revalidation: {
-    documentTypes: ["post"],
+    documents: [{ type: "post", pathPrefix: "post", tagPrefix: "post" }],
     endpointPath: "/api/revalidate",
   },
 };

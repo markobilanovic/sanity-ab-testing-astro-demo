@@ -49,27 +49,31 @@ type PostHogAdapterOptions = {
   personalApiKey?: string;
 };
 
-type RevalidationContext = {
-  slug: string;
-  documentType: string;
+type RevalidationDocumentConfig = {
+  type?: string;
+  pathPrefix?: string;
+  tagPrefix?: string;
 };
 
 type RevalidationConfig = {
-  documentTypes?: string[];
+  documents?: RevalidationDocumentConfig[];
   endpointPath?: string;
   secretEnvVar?: string;
   delayMs?: number;
-  tagPrefix?: string;
-  pathPrefix?: string;
+};
+
+type ResolvedRevalidationDocumentConfig = {
+  type: string;
+  pathPrefix: string;
+  tagPrefix: string;
 };
 
 type ResolvedRevalidationConfig = {
-  documentTypes: string[];
+  documentsByType: Map<string, ResolvedRevalidationDocumentConfig>;
   endpointPath: string;
   secretEnvVar: string;
   delayMs: number;
-  getTags: (context: RevalidationContext) => string[];
-  getPaths: (context: RevalidationContext) => string[];
+  getDocument: (documentType: string) => ResolvedRevalidationDocumentConfig | null;
 };
 
 export type AbObjectCloningOptions = {
@@ -144,26 +148,43 @@ function resolveRevalidationConfig(
     typeof config?.delayMs === "number" && Number.isFinite(config.delayMs)
       ? Math.max(0, config.delayMs)
       : DEFAULT_REVALIDATE_DELAY_MS;
-  const configuredDocumentTypes = normalizeNonEmptyStrings(config?.documentTypes);
-  const documentTypes =
-    configuredDocumentTypes.length > 0
-      ? configuredDocumentTypes
-      : [DEFAULT_REVALIDATE_DOCUMENT_TYPE];
   const secretEnvVar =
     normalizeNonEmptyString(config?.secretEnvVar) ??
     "SANITY_STUDIO_ASTRO_REVALIDATE_SECRET";
-  const tagPrefix =
-    normalizeNonEmptyString(config?.tagPrefix) ?? DEFAULT_REVALIDATE_DOCUMENT_TYPE;
-  const pathPrefix =
-    normalizeNonEmptyString(config?.pathPrefix) ?? DEFAULT_REVALIDATE_DOCUMENT_TYPE;
+  const configuredDocuments = Array.isArray(config?.documents)
+    ? config.documents
+    : [];
+
+  const documentsByType = new Map<string, ResolvedRevalidationDocumentConfig>();
+  for (const documentConfig of configuredDocuments) {
+    const type = normalizeNonEmptyString(documentConfig?.type);
+    if (!type || documentsByType.has(type)) {
+      continue;
+    }
+
+    const pathPrefix = normalizeNonEmptyString(documentConfig.pathPrefix) ?? type;
+    const tagPrefix = normalizeNonEmptyString(documentConfig.tagPrefix) ?? type;
+    documentsByType.set(type, {
+      type,
+      pathPrefix,
+      tagPrefix,
+    });
+  }
+
+  if (documentsByType.size === 0) {
+    documentsByType.set(DEFAULT_REVALIDATE_DOCUMENT_TYPE, {
+      type: DEFAULT_REVALIDATE_DOCUMENT_TYPE,
+      pathPrefix: DEFAULT_REVALIDATE_DOCUMENT_TYPE,
+      tagPrefix: DEFAULT_REVALIDATE_DOCUMENT_TYPE,
+    });
+  }
 
   return {
     endpointPath,
     delayMs,
-    documentTypes,
+    documentsByType,
     secretEnvVar,
-    getTags: (context) => [`${tagPrefix}:${context.slug}`],
-    getPaths: (context) => [`/${pathPrefix}/${context.slug}`],
+    getDocument: (documentType) => documentsByType.get(documentType) ?? null,
   };
 }
 
@@ -176,13 +197,18 @@ async function triggerRevalidation(
     return;
   }
 
+  const documentRevalidation = revalidationConfig.getDocument(documentType);
+  if (!documentRevalidation) {
+    return;
+  }
+
   const payload: {
     tags: string[];
     paths: string[];
     secret?: string;
   } = {
-    tags: revalidationConfig.getTags({ slug, documentType }),
-    paths: revalidationConfig.getPaths({ slug, documentType }),
+    tags: [`${documentRevalidation.tagPrefix}:${slug}`],
+    paths: [`/${documentRevalidation.pathPrefix}/${slug}`],
   };
   const revalidateSecret = normalizeNonEmptyString(
     (import.meta.env as Record<string, unknown>)[revalidationConfig.secretEnvVar],
@@ -693,10 +719,7 @@ const abObjectCloningPlugin = definePlugin<AbObjectCloningOptions | void>(
           }
 
           const schemaTypeName = getSchemaTypeName(context.schemaType);
-          if (
-            !schemaTypeName ||
-            !revalidationConfig.documentTypes.includes(schemaTypeName)
-          ) {
+          if (!schemaTypeName || !revalidationConfig.getDocument(schemaTypeName)) {
             return prev;
           }
 
