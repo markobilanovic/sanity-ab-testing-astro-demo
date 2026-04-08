@@ -5,6 +5,13 @@ import {
   serializeCompositePostSlug,
   type AbTestRouteSource,
 } from "./sanity/lib/ab-routing";
+import {
+  buildAbExperimentsByPostSlug,
+  extractFeatureFlags,
+  getActiveFeatureFlags,
+  getCanonicalPostSlug,
+  getRequestedPostSlug,
+} from "./sanity/lib/ab-experiments";
 import { loadQuery } from "./sanity/lib/load-query";
 
 const AB_TEST_CACHE_TTL_MS = 60_000;
@@ -18,25 +25,6 @@ let abTestCache:
       tests: AbTestRouteSource[];
     }
   | null = null;
-
-function normalizeNonEmptyString(value: unknown): string | null {
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
-
-function normalizeNonEmptyStrings(values: unknown): string[] {
-  if (!Array.isArray(values)) {
-    return [];
-  }
-
-  return values
-    .map((value) => normalizeNonEmptyString(value))
-    .filter((value): value is string => Boolean(value));
-}
 
 function getPosthogClient(): PostHog | null {
   const apiKey = import.meta.env.POSTHOG_API_KEY;
@@ -69,109 +57,6 @@ async function getAbTests(): Promise<AbTestRouteSource[]> {
     tests,
   };
   return tests;
-}
-
-function extractFeatureFlags(
-  value: unknown,
-): Record<string, string | boolean | undefined> {
-  if (!value || typeof value !== "object") {
-    return {};
-  }
-
-  const maybeFlags = (value as { featureFlags?: unknown }).featureFlags;
-  if (!maybeFlags || typeof maybeFlags !== "object") {
-    return {};
-  }
-
-  const flags: Record<string, string | boolean | undefined> = {};
-  for (const [key, flagValue] of Object.entries(
-    maybeFlags as Record<string, unknown>,
-  )) {
-    if (
-      typeof flagValue === "string" ||
-      typeof flagValue === "boolean" ||
-      typeof flagValue === "undefined"
-    ) {
-      flags[key] = flagValue;
-    }
-  }
-
-  return flags;
-}
-
-function buildAbExperimentsByPostSlug(
-  abTests: AbTestRouteSource[],
-  featureFlags: Record<string, string | boolean | undefined>,
-): Record<string, AbMiddlewareExperiment[]> {
-  const byPostSlug: Record<string, AbMiddlewareExperiment[]> = {};
-
-  for (const abTest of abTests) {
-    const abTestDocId = normalizeNonEmptyString(abTest._id);
-    const abId = normalizeNonEmptyString(abTest.id);
-    if (!abTestDocId || !abId) {
-      continue;
-    }
-
-    const assignedVariant = featureFlags[abId];
-    if (typeof assignedVariant !== "string") {
-      continue;
-    }
-
-    const variantCodes = new Set(normalizeNonEmptyStrings(abTest.variantCodes));
-    if (!variantCodes.has(assignedVariant)) {
-      continue;
-    }
-
-    const referencedPostSlugs = normalizeNonEmptyStrings(
-      (abTest.referencedPosts ?? []).map((post) => post.slug?.current),
-    );
-    if (referencedPostSlugs.length === 0) {
-      continue;
-    }
-
-    for (const postSlug of referencedPostSlugs) {
-      byPostSlug[postSlug] ??= [];
-      byPostSlug[postSlug].push({
-        abId,
-        abTestDocId,
-        variantCode: assignedVariant,
-      });
-    }
-  }
-
-  return byPostSlug;
-}
-
-function getActiveFeatureFlags(
-  featureFlags: Record<string, string | boolean | undefined>,
-): Record<string, true | string> {
-  const activeFlags: Record<string, true | string> = {};
-
-  for (const [flagKey, flagValue] of Object.entries(featureFlags)) {
-    if (flagValue === true) {
-      activeFlags[flagKey] = true;
-      continue;
-    }
-
-    if (typeof flagValue === "string" && flagValue.length > 0) {
-      activeFlags[flagKey] = flagValue;
-    }
-  }
-
-  return activeFlags;
-}
-
-function getRequestedPostSlug(pathname: string): string | null {
-  const match = /^\/post\/([^/]+)\/?$/.exec(pathname);
-  if (!match) {
-    return null;
-  }
-
-  try {
-    return decodeURIComponent(match[1]);
-  } catch {
-    return match[1];
-  }
 }
 
 export const onRequest = defineMiddleware(async (context, next) => {
@@ -217,7 +102,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
       return next();
     }
 
-    const canonicalPostSlug = requestedPostSlug.split("--")[0]?.trim();
+    const canonicalPostSlug = getCanonicalPostSlug(requestedPostSlug);
     if (!canonicalPostSlug) {
       return next();
     }

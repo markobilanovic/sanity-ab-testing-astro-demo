@@ -9,12 +9,11 @@ import {
   POST_BY_SLUG_QUERY,
   applyAbVariants,
   buildAbPostStaticPaths,
-  orderAndDedupeAbRouteContexts,
   resolveAbRouteFromSlug,
-  resolveAbRouteContexts,
   type AbRouteProps,
   type AbTestRouteSource,
 } from "../../sanity/lib/ab-routing";
+import { resolveAbRouteStateForRequest } from "../../sanity/lib/ab-experiments";
 
 export const prerender = true;
 
@@ -51,46 +50,27 @@ type PostDocument = SanityDocument & {
 
 const slug = Astro.params.slug;
 const routeProps = Astro.props as Partial<AbRouteProps>;
-const rewrittenPostSlug = Astro.locals.rewrittenPostSlug;
-let postSlug =
-  typeof routeProps.postSlug === "string"
-    ? routeProps.postSlug
-    : rewrittenPostSlug ?? slug;
-let routeContexts = resolveAbRouteContexts(routeProps);
+const routeState = resolveAbRouteStateForRequest({
+  routeSlug: slug,
+  routeProps,
+  rewrittenPostSlug: Astro.locals.rewrittenPostSlug,
+  abExperimentsByPostSlug: Astro.locals.abExperimentsByPostSlug,
+});
 
-if (
-  slug &&
-  routeContexts.length === 0 &&
-  !rewrittenPostSlug &&
-  !routeProps.postSlug
-) {
+let postSlug = routeState.postSlug;
+let abRouteContexts = routeState.contexts;
+
+if (slug && routeState.shouldResolveFromRouteSlug) {
   const abResult = await loadQuery<AbTestRouteSource[]>({
     query: AB_TEST_VARIANT_ROUTES_QUERY,
   });
   const resolvedRoute = resolveAbRouteFromSlug(slug, abResult.data ?? []);
   if (resolvedRoute) {
     postSlug = resolvedRoute.postSlug;
-    routeContexts = resolvedRoute.contexts;
+    abRouteContexts = resolvedRoute.contexts;
   }
 }
-const middlewareContexts = postSlug
-  ? (Astro.locals.abExperimentsByPostSlug?.[postSlug] ?? []).map(
-      ({
-        abTestDocId,
-        variantCode,
-      }: {
-        abTestDocId: string;
-        variantCode: string;
-      }) => ({
-        abTestDocId,
-        variantCode,
-      }),
-    )
-  : [];
-const abRouteContexts = orderAndDedupeAbRouteContexts([
-  ...routeContexts,
-  ...middlewareContexts,
-]);
+
 let post: PostDocument | null = null;
 const cacheTags = postSlug ? [`post:${postSlug}`] : [];
 let resolvedRelatedPosts: Array<{ _id: string; title: string; slug: string }> = [];

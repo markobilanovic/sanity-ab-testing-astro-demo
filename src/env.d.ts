@@ -11,11 +11,8 @@ interface ImportMetaEnv {
   readonly SANITY_STUDIO_ASTRO_REVALIDATE_SECRET?: string;
 }
 
-type AbMiddlewareExperiment = {
-  abId: string;
-  abTestDocId: string;
-  variantCode: string;
-};
+type AbMiddlewareExperiment =
+  import("./sanity/lib/ab-experiments").AbMiddlewareExperiment;
 
 declare namespace App {
   interface Locals {
