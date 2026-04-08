@@ -14,12 +14,16 @@ interface ImportMetaEnv {
   readonly SANITY_STUDIO_ASTRO_REVALIDATE_SECRET?: string;
 }
 
-declare namespace App {
-  interface Locals {
-    posthogDistinctId?: string;
-    abExperimentsByRouteKey?: Record<string, AbMiddlewareExperiment[]>;
-    rewrittenDocumentSlug?: string;
-    rewrittenDocumentType?: AbDocumentType;
-    rewrittenExperiment?: AbMiddlewareExperiment;
+declare global {
+  namespace App {
+    interface Locals {
+      posthogDistinctId?: string;
+      abExperimentsByRouteKey?: Record<string, AbMiddlewareExperiment[]>;
+      rewrittenDocumentSlug?: string;
+      rewrittenDocumentType?: AbDocumentType;
+      rewrittenExperiment?: AbMiddlewareExperiment;
+    }
   }
 }
+
+export {};
