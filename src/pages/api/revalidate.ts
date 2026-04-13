@@ -1,23 +1,10 @@
 import type { APIRoute } from "astro";
+import {
+  parseRevalidateBody,
+  type RevalidateBody,
+} from "../../shared/ab-core/revalidate-core";
 
 export const prerender = false;
-
-type RevalidateBody = {
-  secret?: unknown;
-  tags?: unknown;
-  paths?: unknown;
-};
-
-function normalizeNonEmptyStrings(input: unknown): string[] {
-  if (!Array.isArray(input)) {
-    return [];
-  }
-
-  return input
-    .filter((value): value is string => typeof value === "string")
-    .map((value) => value.trim())
-    .filter(Boolean);
-}
 
 export const POST: APIRoute = async (context) => {
   if (!context.cache.enabled) {
@@ -42,22 +29,12 @@ export const POST: APIRoute = async (context) => {
   }
 
   const configuredSecret = import.meta.env.ASTRO_REVALIDATE_SECRET?.trim();
-  if (configuredSecret) {
-    const providedSecret =
-      typeof body.secret === "string" ? body.secret.trim() : "";
-    if (!providedSecret || providedSecret !== configuredSecret) {
-      return Response.json({ ok: false, error: "Unauthorized." }, { status: 401 });
-    }
+  const parsed = parseRevalidateBody(body, configuredSecret);
+  if (!parsed.ok) {
+    return Response.json({ ok: false, error: parsed.error }, { status: parsed.status });
   }
 
-  const tags = normalizeNonEmptyStrings(body.tags);
-  const paths = normalizeNonEmptyStrings(body.paths);
-  if (tags.length === 0 && paths.length === 0) {
-    return Response.json(
-      { ok: false, error: "Provide at least one cache tag or path." },
-      { status: 400 },
-    );
-  }
+  const { tags, paths } = parsed.request;
 
   const invalidatedPaths: string[] = [];
   if (tags.length > 0) {

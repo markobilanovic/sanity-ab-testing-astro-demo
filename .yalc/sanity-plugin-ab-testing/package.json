@@ -1,6 +1,6 @@
 {
   "name": "sanity-plugin-ab-testing",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Define A/B tests in Sanity by creating content variants directly in the CMS.",
   "keywords": [
     "sanity",
@@ -49,11 +49,13 @@
     "@sanity/incompatible-plugin": "^1.0.5"
   },
   "peerDependencies": {
-    "react": "^18",
-    "sanity": "^3"
+    "@sanity/ui": "^2.0.0 || ^3.0.0",
+    "react": "^18 || ^19",
+    "react-dom": "^18 || ^19",
+    "sanity": "^3.0.0 || ^4.0.0 || ^5.0.0"
   },
   "engines": {
     "node": ">=18"
   },
-  "yalcSig": "e818a77789bfa78bac7f73e5816f2d75"
+  "yalcSig": "6924783617838d59a2d8130da1dd3e70"
 }

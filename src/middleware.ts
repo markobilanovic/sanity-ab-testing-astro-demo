@@ -2,16 +2,14 @@ import { defineMiddleware } from "astro:middleware";
 import { PostHog } from "posthog-node";
 import {
   AB_TEST_VARIANT_ROUTES_QUERY,
-  serializeCompositeSlug,
   type AbTestRouteSource,
 } from "./sanity/lib/ab-routing";
 import {
   buildAbExperimentsByRouteKey,
   extractFeatureFlags,
   getActiveFeatureFlags,
-  getCanonicalDocumentSlug,
-  getRequestedAbRoute,
 } from "./sanity/lib/ab-experiments";
+import { decideAbRewrite } from "./shared/ab-core/middleware-core";
 import { loadQuery } from "./sanity/lib/load-query";
 
 const AB_TEST_CACHE_TTL_MS = 60_000;
@@ -92,58 +90,34 @@ export const onRequest = defineMiddleware(async (context, next) => {
       distinctId,
       activeFeatureFlags,
     });
-    context.locals.abExperimentsByRouteKey = buildAbExperimentsByRouteKey(
+    const abExperimentsByRouteKey = buildAbExperimentsByRouteKey(
       abTests,
       featureFlags,
     );
+    context.locals.abExperimentsByRouteKey = abExperimentsByRouteKey;
 
-    const requestedRoute = getRequestedAbRoute(context.url.pathname);
-    if (!requestedRoute) {
+    const rewriteDecision = decideAbRewrite({
+      pathname: context.url.pathname,
+      abTests,
+      featureFlags,
+      abExperimentsByRouteKey,
+    });
+    if (!rewriteDecision.rewrittenPath) {
       return next();
     }
 
-    const canonicalDocumentSlug = getCanonicalDocumentSlug(requestedRoute.requestedSlug);
-    if (!canonicalDocumentSlug) {
-      return next();
-    }
-
-    const routeKey = `${requestedRoute.documentType}:${canonicalDocumentSlug}`;
-    const assignedExperiments =
-      context.locals.abExperimentsByRouteKey[routeKey] ?? [];
-    if (assignedExperiments.length === 0) {
-      return next();
-    }
-
-    const rewrittenSlug = serializeCompositeSlug(
-      canonicalDocumentSlug,
-      assignedExperiments.map(({ abId, variantCode }) => ({
-        abId,
-        variantCode,
-      })),
-    );
-    if (!rewrittenSlug || rewrittenSlug === requestedRoute.requestedSlug) {
-      return next();
-    }
-
-    const encodedSlug = encodeURIComponent(rewrittenSlug);
-    const rewrittenPath =
-      requestedRoute.documentType === "post" ? `/post/${encodedSlug}` : `/${encodedSlug}`;
-    if (rewrittenPath === context.url.pathname) {
-      return next();
-    }
-
-    context.locals.rewrittenDocumentSlug = canonicalDocumentSlug;
-    context.locals.rewrittenDocumentType = requestedRoute.documentType;
+    context.locals.rewrittenDocumentSlug = rewriteDecision.canonicalDocumentSlug;
+    context.locals.rewrittenDocumentType = rewriteDecision.documentType;
 
     const rewrittenUrl = new URL(context.url);
-    rewrittenUrl.pathname = rewrittenPath;
+    rewrittenUrl.pathname = rewriteDecision.rewrittenPath;
 
     console.info("[middleware][posthog] rewriting route", {
       from: context.url.pathname,
-      to: rewrittenPath,
-      documentType: requestedRoute.documentType,
+      to: rewriteDecision.rewrittenPath,
+      documentType: rewriteDecision.documentType,
       distinctId,
-      experiments: assignedExperiments,
+      experiments: rewriteDecision.experiments ?? [],
     });
 
     return context.rewrite(rewrittenUrl);
