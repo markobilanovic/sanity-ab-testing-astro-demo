@@ -11,7 +11,8 @@
     "preview": "astro preview",
     "astro": "astro",
     "sanity": "sanity",
-    "tsc": "tsc"
+    "tsc": "tsc",
+    "test": "node --test --import tsx src/shared/ab-core/ab-routing/__tests__/*.test.ts"
   },
   "dependencies": {
     "@astrojs/node": "^10.0.4",
@@ -29,6 +30,7 @@
     "sanity-plugin-ab-testing": "file:.yalc/sanity-plugin-ab-testing"
   },
   "devDependencies": {
+    "tsx": "^4.20.6",
     "typescript": "^5.9.3"
   }
 }
