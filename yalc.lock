@@ -1,0 +1,9 @@
+{
+  "version": "v1",
+  "packages": {
+    "sanity-plugin-ab-testing": {
+      "signature": "e818a77789bfa78bac7f73e5816f2d75",
+      "replaced": "link:.yalc/sanity-plugin-ab-testing"
+    }
+  }
+}

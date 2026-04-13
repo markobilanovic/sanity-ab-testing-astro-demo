@@ -1,5 +1,5 @@
 {
-  "name": "sanity-astro-minimal",
+  "name": "sanity-ab-testing-astro-demo",
   "type": "module",
   "version": "0.0.1",
   "engines": {
@@ -25,7 +25,8 @@
     "posthog-node": "^5.21.2",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "sanity": "^5.19.0"
+    "sanity": "^5.19.0",
+    "sanity-plugin-ab-testing": "file:.yalc/sanity-plugin-ab-testing"
   },
   "devDependencies": {
     "typescript": "^5.9.3"

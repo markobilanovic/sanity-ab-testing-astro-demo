@@ -22,6 +22,9 @@ export default defineConfig({
   },
   vite: {
     envPrefix: ["PUBLIC_", "SANITY_STUDIO_"],
+    resolve: {
+      dedupe: ["react", "react-dom", "sanity", "@sanity/ui", "@sanity/types", "styled-components"],
+    },
   },
   integrations: [
     sanity({

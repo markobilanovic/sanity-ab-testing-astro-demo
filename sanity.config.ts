@@ -2,8 +2,7 @@ import { defineConfig } from "sanity";
 import { structureTool } from "sanity/structure";
 import { visionTool } from "@sanity/vision";
 import { schema } from "./src/sanity/schemaTypes";
-import { abObjectCloning } from "./src/sanity/plugins/abObjectCloning";
-import type { AbObjectCloningOptions } from "./src/sanity/plugins/abObjectCloning.tsx";
+import {abObjectCloningPlugin} from "sanity-plugin-ab-testing";
 
 function readStudioEnv(name: string): string | undefined {
   const valueFromImportMeta = (
@@ -30,18 +29,6 @@ function requireStudioEnv(...names: string[]): string {
   throw new Error(`Missing required environment variable: ${names.join(" or ")}`);
 }
 
-const abPluginOptions: AbObjectCloningOptions = {
-  posthog: {
-    host: readStudioEnv("SANITY_STUDIO_POSTHOG_HOST"),
-    projectId: readStudioEnv("SANITY_STUDIO_POSTHOG_PROJECT_ID"),
-    personalApiKey: readStudioEnv("SANITY_STUDIO_POSTHOG_PERSONAL_API_KEY"),
-  },
-  revalidation: {
-    documents: [{ type: "post", pathPrefix: "post", tagPrefix: "post" }],
-    endpointPath: "/api/revalidate",
-  },
-};
-
 export default defineConfig({
   projectId: requireStudioEnv(
     "PUBLIC_SANITY_PROJECT_ID",
@@ -50,7 +37,17 @@ export default defineConfig({
   dataset: requireStudioEnv("PUBLIC_SANITY_DATASET", "SANITY_STUDIO_DATASET"),
   plugins: [
     structureTool(),
-    abObjectCloning(abPluginOptions),
+    abObjectCloningPlugin({
+      posthog: {
+        host: readStudioEnv("SANITY_STUDIO_POSTHOG_HOST"),
+        projectId: readStudioEnv("SANITY_STUDIO_POSTHOG_PROJECT_ID"),
+        personalApiKey: readStudioEnv("SANITY_STUDIO_POSTHOG_PERSONAL_API_KEY"),
+      },
+      revalidation: {
+        documents: [{ type: "post", pathPrefix: "post", tagPrefix: "post" }],
+        endpointPath: "/api/revalidate",
+      },
+    }),
     visionTool(),
   ],
   schema,
