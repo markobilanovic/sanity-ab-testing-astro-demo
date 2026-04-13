@@ -12,7 +12,7 @@
     "astro": "astro",
     "sanity": "sanity",
     "tsc": "tsc",
-    "test": "node --test --import tsx src/shared/ab-core/ab-routing/__tests__/*.test.ts"
+    "test": "node --test --import tsx src/shared/ab-core/*/__tests__/*.test.ts"
   },
   "dependencies": {
     "@astrojs/node": "^10.0.4",

@@ -3,6 +3,8 @@ export type { AbDocumentType, AbRouteContext, AbRouteProps, AbTestRouteSource } 
 export { applyAbVariants } from "./apply-ab-variants";
 export { buildAbStaticPaths } from "./build-ab-static-paths";
 export { getTestsForDocumentSlug } from "./get-tests-for-document-slug";
+export { normalizeNonEmptyString } from "./normalize-non-empty-string";
+export { normalizeNonEmptyStrings } from "./normalize-non-empty-strings";
 export { orderAndDedupeAbRouteContexts } from "./order-and-dedupe-ab-route-contexts";
 export { resolveAbRouteContexts } from "./resolve-ab-route-contexts";
 export { resolveAbRouteFromSlug } from "./resolve-ab-route-from-slug";
