@@ -8,16 +8,27 @@ npm install sanity-plugin-ab-testing
 
 ## Usage
 
-Add it as a plugin in `sanity.config.ts` (or .js):
+In `sanity.config.ts`:
 
 ```ts
 import {defineConfig} from 'sanity'
-import {myPlugin} from 'sanity-plugin-ab-testing'
+import {abObjectCloningPlugin} from 'sanity-plugin-ab-testing'
 
 export default defineConfig({
-  //...
-  plugins: [myPlugin({})],
+  plugins: [abObjectCloningPlugin()],
 })
+```
+
+In your schema index:
+
+```ts
+import type {SchemaTypeDefinition} from 'sanity'
+import {withAbObject} from 'sanity-plugin-ab-testing'
+import {postType} from './post'
+
+export const schema: {types: SchemaTypeDefinition[]} = {
+  types: [withAbObject(postType)],
+}
 ```
 
 ## License

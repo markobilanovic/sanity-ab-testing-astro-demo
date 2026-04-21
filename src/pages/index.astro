@@ -1,54 +1,392 @@
 ---
-import Layout from "../layouts/Layout.astro";
-import { loadQuery } from "../sanity/lib/load-query";
+import MarketingLayout from "../layouts/MarketingLayout.astro";
+import SiteHeader from "../components/home/SiteHeader.astro";
+import SiteFooter from "../components/home/SiteFooter.astro";
 
-type PostListItem = {
-  _id: string;
-  title: string;
-  slug?: { current?: string };
-};
+const steps = [
+  {
+    number: "01",
+    title: "Define an experiment",
+    description:
+      "Describe your control and variant in content. No custom infrastructure required to get started.",
+  },
+  {
+    number: "02",
+    title: "Render the variant",
+    description:
+      "The library picks a variant per visitor and renders it transparently alongside the rest of your page.",
+  },
+  {
+    number: "03",
+    title: "Inspect the result",
+    description:
+      "Switch between control and variant on the demo page to see exactly what a user would experience.",
+  },
+];
 
-let posts: PostListItem[] = [];
-let loadError = false;
-
-try {
-  const result = await loadQuery<PostListItem[]>({
-    query: `*[_type == "post"] | order(publishedAt desc){
-      _id,
-      title,
-      slug
-    }`,
-  });
-  posts = result.data ?? [];
-} catch {
-  loadError = true;
-}
+const highlights = [
+  {
+    title: "Simple setup",
+    description:
+      "Drop it in and describe experiments in content. No opinionated build step.",
+  },
+  {
+    title: "Visible behavior",
+    description:
+      "Experiments are easy to reason about — what renders is what you configured.",
+  },
+  {
+    title: "Inspect variants",
+    description:
+      "Toggle between control and variant on the demo to confirm behavior end-to-end.",
+  },
+];
 ---
 
-<Layout title="Astro + Sanity blog">
-  <h1>Astro + Sanity</h1>
-  <p>
-    Open <a href="/studio">/studio</a> to manage content, then create a post and
-    publish it.
-  </p>
-  {loadError && (
-    <p>
-      Could not load posts yet. Confirm your Sanity project values in `.env`,
-      then refresh.
-    </p>
-  )}
+<MarketingLayout>
+  <SiteHeader />
 
-  {
-    posts.length > 0 ? (
-      <ul>
-        {posts.map((post) => (
-          <li>
-            <a href={`/post/${post.slug?.current}`}>{post.title}</a>
-          </li>
-        ))}
-      </ul>
-    ) : (
-      <p>No posts yet. Create one in Studio first.</p>
-    )
+  <main id="main">
+    <!-- Hero -->
+    <section class="hero">
+      <div class="container hero-inner">
+        <span class="eyebrow">A/B testing library &middot; demo</span>
+        <h1>A/B testing, made easy to demo</h1>
+        <p class="lede">
+          A simple way to present, run, and inspect experiments in a real
+          working example.
+        </p>
+        <div class="cta-row">
+          <a class="btn btn-primary" href="/demo">See live demo</a>
+          <a class="btn btn-secondary" href="#how-it-works">How it works</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- What it does -->
+    <section class="section" id="what-it-does">
+      <div class="container">
+        <h2>What it does</h2>
+        <p class="section-lede">
+          This library helps you run A/B tests in a simple, transparent way —
+          define experiments in content, render variants per visitor, and keep
+          the behavior easy to inspect at any time.
+        </p>
+
+        <ul class="highlight-grid" role="list">
+          {highlights.map((h) => (
+            <li class="highlight-card">
+              <h3>{h.title}</h3>
+              <p>{h.description}</p>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+
+    <!-- How it works -->
+    <section class="section section-muted" id="how-it-works">
+      <div class="container">
+        <h2>How it works</h2>
+        <p class="section-lede">Three steps from idea to live experiment.</p>
+
+        <ol class="steps" role="list">
+          {steps.map((step) => (
+            <li class="step">
+              <div class="step-number" aria-hidden="true">{step.number}</div>
+              <div class="step-body">
+                <h3>{step.title}</h3>
+                <p>{step.description}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+      </div>
+    </section>
+
+    <!-- Why this demo -->
+    <section class="section" id="why-demo">
+      <div class="container why-demo">
+        <div>
+          <h2>Why this demo</h2>
+          <p>
+            This homepage presents the library — what it does and how it fits
+            into a project. The actual experiment is showcased on{" "}
+            <a class="inline-link" href="/demo">/demo</a>, where you can see a
+            real variant render in the browser and inspect how it behaves.
+          </p>
+          <p>
+            The goal is to make A/B testing feel approachable for developers:
+            easy to wire up, easy to read, and easy to trust.
+          </p>
+        </div>
+
+        <aside class="aside-card" aria-label="At a glance">
+          <h3>At a glance</h3>
+          <dl>
+            <div>
+              <dt>Homepage</dt>
+              <dd>Presents the library and its ideas.</dd>
+            </div>
+            <div>
+              <dt><code>/demo</code></dt>
+              <dd>A live experiment you can inspect.</dd>
+            </div>
+            <div>
+              <dt>Stack</dt>
+              <dd>Astro &middot; Sanity</dd>
+            </div>
+          </dl>
+        </aside>
+      </div>
+    </section>
+
+    <!-- Final CTA -->
+    <section class="section final-cta">
+      <div class="container final-cta-inner">
+        <h2>Ready to see it in action?</h2>
+        <p>Open the demo to watch an experiment render in a real page.</p>
+        <a class="btn btn-primary" href="/demo">See live demo</a>
+      </div>
+    </section>
+  </main>
+
+  <SiteFooter />
+</MarketingLayout>
+
+<style>
+  main {
+    display: block;
   }
-</Layout>
+
+  /* Hero */
+  .hero {
+    padding: 5rem 0 4rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hero::before {
+    content: "";
+    position: absolute;
+    inset: -20% 20% auto 20%;
+    height: 320px;
+    background: radial-gradient(
+      ellipse at center,
+      color-mix(in srgb, var(--accent) 18%, transparent),
+      transparent 70%
+    );
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  .hero-inner {
+    text-align: center;
+  }
+
+  .eyebrow {
+    display: inline-block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 0.35rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    margin-bottom: 1.25rem;
+    background: var(--surface);
+  }
+
+  .hero h1 {
+    font-size: clamp(2.25rem, 5vw, 3.5rem);
+    font-weight: 700;
+    max-width: 20ch;
+    margin: 0 auto 1rem;
+  }
+
+  .lede {
+    font-size: clamp(1.05rem, 1.6vw, 1.2rem);
+    max-width: 44ch;
+    margin: 0 auto 2rem;
+  }
+
+  .cta-row {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    justify-content: center;
+  }
+
+  /* Sections */
+  .section {
+    padding: 4rem 0;
+  }
+
+  .section-muted {
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .section h2 {
+    font-size: clamp(1.6rem, 2.6vw, 2rem);
+    font-weight: 700;
+  }
+
+  .section-lede {
+    font-size: 1.05rem;
+    max-width: 52ch;
+    margin-bottom: 2rem;
+  }
+
+  /* What it does */
+  .highlight-grid {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+  }
+
+  .highlight-card {
+    padding: 1.25rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg);
+  }
+
+  .highlight-card h3 {
+    font-size: 1rem;
+    margin-bottom: 0.35rem;
+  }
+
+  .highlight-card p {
+    margin: 0;
+    font-size: 0.95rem;
+  }
+
+  /* How it works */
+  .steps {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1rem;
+    counter-reset: step;
+  }
+
+  .step {
+    padding: 1.5rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .step-number {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.8rem;
+    color: var(--accent);
+    font-weight: 700;
+    letter-spacing: 0.05em;
+  }
+
+  .step-body h3 {
+    font-size: 1.05rem;
+    margin-bottom: 0.35rem;
+  }
+
+  .step-body p {
+    margin: 0;
+    font-size: 0.95rem;
+  }
+
+  /* Why this demo */
+  .why-demo {
+    display: grid;
+    grid-template-columns: 1.3fr 1fr;
+    gap: 2.5rem;
+    align-items: start;
+  }
+
+  .inline-link {
+    color: var(--accent);
+    text-decoration: none;
+    font-weight: 600;
+  }
+
+  .inline-link:hover {
+    text-decoration: underline;
+  }
+
+  .aside-card {
+    padding: 1.5rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+
+  .aside-card h3 {
+    font-size: 0.8rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--subtle);
+    margin-bottom: 1rem;
+  }
+
+  .aside-card dl {
+    margin: 0;
+    display: grid;
+    gap: 0.9rem;
+  }
+
+  .aside-card dt {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--fg);
+    margin-bottom: 0.15rem;
+  }
+
+  .aside-card dd {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+
+  .aside-card code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.85rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 0.05rem 0.35rem;
+    border-radius: 4px;
+  }
+
+  @media (max-width: 720px) {
+    .why-demo {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* Final CTA */
+  .final-cta {
+    padding: 5rem 0 4rem;
+  }
+
+  .final-cta-inner {
+    text-align: center;
+  }
+
+  .final-cta h2 {
+    font-size: clamp(1.6rem, 2.6vw, 2rem);
+  }
+
+  .final-cta p {
+    margin-bottom: 1.5rem;
+  }
+</style>

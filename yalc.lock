@@ -2,7 +2,7 @@
   "version": "v1",
   "packages": {
     "sanity-plugin-ab-testing": {
-      "signature": "6924783617838d59a2d8130da1dd3e70",
+      "signature": "799735f6ee016c190e90067cf478aca0",
       "replaced": "link:.yalc/sanity-plugin-ab-testing"
     }
   }

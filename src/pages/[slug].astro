@@ -2,6 +2,9 @@
 import type { SanityDocument } from "@sanity/client";
 import Layout from "../layouts/Layout.astro";
 import PortableText from "../components/PortableText.astro";
+import AbTestBadge, {
+  type AbTestBadgeEntry,
+} from "../components/ab/AbTestBadge.astro";
 import { loadQuery } from "../sanity/lib/load-query";
 import {
   AB_TEST_VARIANT_ROUTES_QUERY,
@@ -9,6 +12,7 @@ import {
   PAGE_SLUGS_QUERY,
   applyAbVariants,
   buildAbStaticPaths,
+  getTestsForDocumentSlug,
   resolveAbRouteFromSlug,
   type AbRouteContext,
   type AbRouteProps,
@@ -37,23 +41,21 @@ type PageDocument = SanityDocument & {
   slug?: { current?: string };
 };
 
-const resolvePageSlugAndContexts = async (
+const resolvePageSlugAndContexts = (
   routeSlug: string | undefined,
   initialDocumentSlug: string | undefined,
   initialContexts: AbRouteContext[],
   shouldResolveFromRouteSlug: boolean,
-): Promise<{
+  abTests: AbTestRouteSource[],
+): {
   documentSlug: string | undefined;
   contexts: AbRouteContext[];
-}> => {
+} => {
   if (!routeSlug || !shouldResolveFromRouteSlug) {
     return { documentSlug: initialDocumentSlug, contexts: initialContexts };
   }
 
-  const abResult = await loadQuery<AbTestRouteSource[]>({
-    query: AB_TEST_VARIANT_ROUTES_QUERY,
-  });
-  const resolvedRoute = resolveAbRouteFromSlug(routeSlug, abResult.data ?? [], "page");
+  const resolvedRoute = resolveAbRouteFromSlug(routeSlug, abTests, "page");
 
   if (!resolvedRoute) {
     return { documentSlug: initialDocumentSlug, contexts: initialContexts };
@@ -76,15 +78,41 @@ const routeState = resolveAbRouteStateForRequest({
   abExperimentsByRouteKey: Astro.locals.abExperimentsByRouteKey,
 });
 
-const resolvedRoute = await resolvePageSlugAndContexts(
+const abTestsResult = await loadQuery<AbTestRouteSource[]>({
+  query: AB_TEST_VARIANT_ROUTES_QUERY,
+});
+const abTests = abTestsResult.data ?? [];
+
+const resolvedRoute = resolvePageSlugAndContexts(
   slug,
   routeState.documentSlug,
   routeState.contexts,
   routeState.shouldResolveFromRouteSlug,
+  abTests,
 );
 
 const pageSlug = resolvedRoute.documentSlug;
 const abRouteContexts = resolvedRoute.contexts;
+
+const applicableTests = pageSlug
+  ? getTestsForDocumentSlug(pageSlug, abTests, "page")
+  : [];
+
+const variantCodeByTestDocId = new Map<string, string>();
+for (const context of abRouteContexts) {
+  variantCodeByTestDocId.set(context.abTestDocId, context.variantCode);
+}
+
+const badgeEntries: AbTestBadgeEntry[] = applicableTests.map((test) => {
+  const activeVariantCode = variantCodeByTestDocId.get(test.abTestDocId);
+  const isControl =
+    !activeVariantCode || activeVariantCode.toLowerCase() === "control";
+  return {
+    testId: test.abId,
+    variantCode: activeVariantCode ?? "control",
+    isControl,
+  };
+});
 
 let page: PageDocument | null = null;
 const cacheTags = pageSlug ? [`page:${pageSlug}`] : [];
@@ -112,6 +140,7 @@ try {
 ---
 
 <Layout title={page?.title ?? "Page not found"}>
+  <AbTestBadge entries={badgeEntries} />
   {page ? (
     <article>
       <h1>{page.title}</h1>

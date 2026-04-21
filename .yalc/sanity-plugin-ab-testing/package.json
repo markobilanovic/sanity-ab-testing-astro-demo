@@ -35,12 +35,16 @@
     "src",
     "v2-incompatible.js"
   ],
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org"
+  },
   "scripts": {
     "build": "plugin-kit verify-package --silent && pkg-utils build --strict --check --clean",
     "format": "prettier --write --cache --ignore-unknown .",
     "link-watch": "plugin-kit link-watch",
     "lint": "eslint .",
     "prepublishOnly": "npm run build",
+    "publish": "npm publish",
     "test": "vitest run",
     "test:watch": "vitest",
     "watch": "pkg-utils watch --strict"
@@ -57,5 +61,5 @@
   "engines": {
     "node": ">=18"
   },
-  "yalcSig": "6924783617838d59a2d8130da1dd3e70"
+  "yalcSig": "799735f6ee016c190e90067cf478aca0"
 }

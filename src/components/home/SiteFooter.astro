@@ -1,0 +1,64 @@
+---
+const year = new Date().getFullYear();
+---
+
+<footer class="site-footer">
+  <div class="container footer-inner">
+    <p class="copy">
+      &copy; {year} ab-testing/demo &middot; Built with Astro and Sanity
+    </p>
+    <ul class="links">
+      <li><a href="/demo">Live demo</a></li>
+      <li><a href="/studio">Studio</a></li>
+      <li><a href="#how-it-works">How it works</a></li>
+    </ul>
+  </div>
+</footer>
+
+<style>
+  .site-footer {
+    margin-top: 4rem;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  .footer-inner {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 1.5rem;
+    padding-bottom: 1.5rem;
+  }
+
+  .copy {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--subtle);
+  }
+
+  .links {
+    display: flex;
+    gap: 1.25rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .links a {
+    font-size: 0.85rem;
+    color: var(--muted);
+    text-decoration: none;
+  }
+
+  .links a:hover {
+    color: var(--fg);
+  }
+
+  @media (max-width: 560px) {
+    .footer-inner {
+      justify-content: flex-start;
+    }
+  }
+</style>
