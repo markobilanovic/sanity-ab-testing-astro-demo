@@ -27,7 +27,7 @@
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "sanity": "^5.19.0",
-    "sanity-plugin-ab-testing": "file:.yalc/sanity-plugin-ab-testing"
+    "sanity-plugin-ab-testing": "^0.1.0"
   },
   "devDependencies": {
     "tsx": "^4.20.6",
