@@ -7,12 +7,17 @@
   },
   "scripts": {
     "dev": "astro dev",
+    "dev:plugin": "npm run plugin:link && concurrently -n plugin,astro -c cyan,magenta \"npm run plugin:watch\" \"npm run dev\"",
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
     "sanity": "sanity",
     "tsc": "tsc",
-    "test": "node --test --import tsx src/shared/ab-core/*/__tests__/*.test.ts"
+    "test": "node --test --import tsx src/shared/ab-core/*/__tests__/*.test.ts",
+    "plugin:link": "cd \"${PLUGIN_REPO:-../sanity-plugin-ab-testing}\" && npm run build >/dev/null && cd - >/dev/null && PLUGIN_ABS=\"$(cd \"${PLUGIN_REPO:-../sanity-plugin-ab-testing}\" && pwd)\" && rm -rf node_modules/sanity-plugin-ab-testing && ln -sfn \"$PLUGIN_ABS\" node_modules/sanity-plugin-ab-testing && echo \"[plugin] linked → $PLUGIN_ABS\"",
+    "plugin:unlink": "npx --yes yalc retreat --all >/dev/null 2>&1 || true; rm -rf .yalc yalc.lock node_modules/sanity-plugin-ab-testing && npm i && echo '[plugin] restored to registry version'",
+    "plugin:watch": "cd \"${PLUGIN_REPO:-../sanity-plugin-ab-testing}\" && npm run watch",
+    "plugin:status": "node -e \"const fs=require('fs'),p='node_modules/sanity-plugin-ab-testing';try{const s=fs.lstatSync(p);if(s.isSymbolicLink()){console.log('mode: LOCAL  → '+fs.readlinkSync(p))}else{console.log('mode: REMOTE ('+require('./package.json').dependencies['sanity-plugin-ab-testing']+')')}}catch(e){console.log('not installed — run: npm i')}\""
   },
   "dependencies": {
     "@astrojs/node": "^10.0.4",
@@ -30,6 +35,7 @@
     "sanity-plugin-ab-testing": "^0.1.0"
   },
   "devDependencies": {
+    "concurrently": "^9.1.0",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3"
   }
