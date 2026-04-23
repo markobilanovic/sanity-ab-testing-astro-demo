@@ -40,5 +40,8 @@
     "tsx": "^4.20.6",
     "typescript": "^5.9.3",
     "vercel": "^52.0.0"
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-linux-x64-gnu": "^4.60.1"
   }
 }
