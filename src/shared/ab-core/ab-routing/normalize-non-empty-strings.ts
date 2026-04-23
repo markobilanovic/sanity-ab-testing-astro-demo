@@ -1,4 +1,4 @@
-import { normalizeNonEmptyString } from "./normalize-non-empty-string";
+import { normalizeNonEmptyString } from "./normalize-non-empty-string.js";
 
 export function normalizeNonEmptyStrings(values: unknown): string[] {
   if (!Array.isArray(values)) {

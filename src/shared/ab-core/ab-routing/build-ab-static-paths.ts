@@ -1,8 +1,8 @@
-import { buildCartesianCombinations } from "./build-cartesian-combinations";
-import { getTestsForDocumentSlug } from "./get-tests-for-document-slug";
-import { normalizeNonEmptyString } from "./normalize-non-empty-string";
-import { serializeCompositeSlug } from "./serialize-composite-slug";
-import type { AbDocumentType, AbRouteProps, AbTestRouteSource } from "./types";
+import { buildCartesianCombinations } from "./build-cartesian-combinations.js";
+import { getTestsForDocumentSlug } from "./get-tests-for-document-slug.js";
+import { normalizeNonEmptyString } from "./normalize-non-empty-string.js";
+import { serializeCompositeSlug } from "./serialize-composite-slug.js";
+import type { AbDocumentType, AbRouteProps, AbTestRouteSource } from "./types.js";
 
 export function buildAbStaticPaths(
   documentSlugs: string[],

@@ -2,8 +2,8 @@ import {
   AB_TEST_REF_FIELD_NAME,
   AB_TOGGLE_FIELD_NAME,
   AB_VARIANTS_FIELD_NAME,
-} from "./constants";
-import type { AbRouteContext } from "./types";
+} from "./constants.js";
+import type { AbRouteContext } from "./types.js";
 
 export function applyAbVariantsForContext(
   value: unknown,

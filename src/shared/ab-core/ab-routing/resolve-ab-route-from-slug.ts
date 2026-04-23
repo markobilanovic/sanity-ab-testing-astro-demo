@@ -1,11 +1,16 @@
 import {
   COMPOSITE_PAIR_SEPARATOR,
   COMPOSITE_SEGMENT_SEPARATOR,
-} from "./constants";
-import { getTestsForDocumentSlug } from "./get-tests-for-document-slug";
-import { normalizeNonEmptyString } from "./normalize-non-empty-string";
-import { orderAndDedupeAbRouteContexts } from "./order-and-dedupe-ab-route-contexts";
-import type { AbDocumentType, AbRouteContext, AbRouteProps, AbTestRouteSource } from "./types";
+} from "./constants.js";
+import { getTestsForDocumentSlug } from "./get-tests-for-document-slug.js";
+import { normalizeNonEmptyString } from "./normalize-non-empty-string.js";
+import { orderAndDedupeAbRouteContexts } from "./order-and-dedupe-ab-route-contexts.js";
+import type {
+  AbDocumentType,
+  AbRouteContext,
+  AbRouteProps,
+  AbTestRouteSource,
+} from "./types.js";
 
 export function resolveAbRouteFromSlug(
   routeSlug: string,

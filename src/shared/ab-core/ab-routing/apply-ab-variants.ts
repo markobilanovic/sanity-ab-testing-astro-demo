@@ -1,5 +1,5 @@
-import { applyAbVariantsForContext } from "./apply-ab-variants-for-context";
-import type { AbRouteContext } from "./types";
+import { applyAbVariantsForContext } from "./apply-ab-variants-for-context.js";
+import type { AbRouteContext } from "./types.js";
 
 export function applyAbVariants<T>(
   value: T,

@@ -1,5 +1,8 @@
-import { COMPOSITE_PAIR_SEPARATOR, COMPOSITE_SEGMENT_SEPARATOR } from "./constants";
-import { normalizeNonEmptyString } from "./normalize-non-empty-string";
+import {
+  COMPOSITE_PAIR_SEPARATOR,
+  COMPOSITE_SEGMENT_SEPARATOR,
+} from "./constants.js";
+import { normalizeNonEmptyString } from "./normalize-non-empty-string.js";
 
 export function serializeCompositeSlug(
   documentSlug: string,

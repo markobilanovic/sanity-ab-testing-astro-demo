@@ -1,4 +1,4 @@
-import type { AbRouteContext, AbRouteTest } from "./types";
+import type { AbRouteContext, AbRouteTest } from "./types.js";
 
 export function buildCartesianCombinations(
   tests: AbRouteTest[],

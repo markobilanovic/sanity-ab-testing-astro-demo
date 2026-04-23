@@ -1,5 +1,5 @@
-import type { AbRouteContext, AbRouteTest } from "./types";
-import { normalizeNonEmptyString } from "./normalize-non-empty-string";
+import type { AbRouteContext, AbRouteTest } from "./types.js";
+import { normalizeNonEmptyString } from "./normalize-non-empty-string.js";
 
 export function orderAndDedupeAbRouteContexts(
   contexts: AbRouteContext[],

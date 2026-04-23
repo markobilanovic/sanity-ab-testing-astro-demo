@@ -1,7 +1,11 @@
-import { AB_TEST_REFERENCES_BY_DOCUMENT_TYPE } from "./constants";
-import { normalizeNonEmptyString } from "./normalize-non-empty-string";
-import { normalizeNonEmptyStrings } from "./normalize-non-empty-strings";
-import type { AbDocumentType, AbRouteTest, AbTestRouteSource } from "./types";
+import { AB_TEST_REFERENCES_BY_DOCUMENT_TYPE } from "./constants.js";
+import { normalizeNonEmptyString } from "./normalize-non-empty-string.js";
+import { normalizeNonEmptyStrings } from "./normalize-non-empty-strings.js";
+import type {
+  AbDocumentType,
+  AbRouteTest,
+  AbTestRouteSource,
+} from "./types.js";
 
 export function getTestsForDocumentSlug(
   documentSlug: string,

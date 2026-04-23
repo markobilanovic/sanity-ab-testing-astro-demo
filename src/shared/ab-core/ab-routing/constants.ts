@@ -1,4 +1,4 @@
-import type { AbDocumentType, AbTestRouteSource } from "./types";
+import type { AbDocumentType, AbTestRouteSource } from "./types.js";
 
 export const AB_TOGGLE_FIELD_NAME = "showAbVariant";
 export const AB_VARIANTS_FIELD_NAME = "abVariants";

@@ -1,6 +1,6 @@
-import { normalizeNonEmptyString } from "./normalize-non-empty-string";
-import { orderAndDedupeAbRouteContexts } from "./order-and-dedupe-ab-route-contexts";
-import type { AbRouteContext, AbRouteProps } from "./types";
+import { normalizeNonEmptyString } from "./normalize-non-empty-string.js";
+import { orderAndDedupeAbRouteContexts } from "./order-and-dedupe-ab-route-contexts.js";
+import type { AbRouteContext, AbRouteProps } from "./types.js";
 
 export function resolveAbRouteContexts(props: Partial<AbRouteProps>): AbRouteContext[] {
   if (!Array.isArray(props.contexts)) {
