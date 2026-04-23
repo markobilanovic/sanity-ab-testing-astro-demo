@@ -15,6 +15,8 @@ import { loadQuery } from "./sanity/lib/load-query";
 const AB_TEST_CACHE_TTL_MS = 60_000;
 const DEFAULT_POSTHOG_HOST = "https://us.i.posthog.com";
 const DISTINCT_ID_COOKIE_NAME = "ph_distinct_id";
+const EDGE_MIDDLEWARE_HEADER = "x-ab-edge-middleware";
+const EDGE_DISTINCT_ID_HEADER = "x-ab-distinct-id";
 
 let posthogClient: PostHog | null = null;
 let abTestCache:
@@ -58,6 +60,21 @@ async function getAbTests(): Promise<AbTestRouteSource[]> {
 }
 
 export const onRequest = defineMiddleware(async (context, next) => {
+  const runningOnVercel = Boolean(process.env.VERCEL);
+  if (runningOnVercel) {
+    context.locals.abExperimentsByRouteKey = {};
+    return next();
+  }
+
+  const handledByEdgeMiddleware =
+    context.request.headers.get(EDGE_MIDDLEWARE_HEADER) === "1";
+  if (handledByEdgeMiddleware) {
+    context.locals.posthogDistinctId =
+      context.request.headers.get(EDGE_DISTINCT_ID_HEADER) ?? undefined;
+    context.locals.abExperimentsByRouteKey = {};
+    return next();
+  }
+
   const client = getPosthogClient();
   if (!client) {
     context.locals.abExperimentsByRouteKey = {};

@@ -86,6 +86,32 @@ npm run dev
 - Site: `http://localhost:4321`
 - Studio: `http://localhost:4321/studio`
 
+## Vercel static edge middleware (sticky PostHog UUID)
+
+This repo includes a root-level `middleware.ts` for Vercel Routing Middleware.
+It runs before static files are served and handles:
+
+- reading/setting `ph_distinct_id` (sticky, `HttpOnly`, `SameSite=Lax`)
+- evaluating PostHog flags server-side
+- rewriting canonical routes (`/:slug`, `/post/:slug`) to prebuilt AB variant paths
+
+Required environment variables in Vercel:
+
+- `POSTHOG_API_KEY`
+- `POSTHOG_HOST` (optional; defaults to `https://us.i.posthog.com`)
+- `PUBLIC_SANITY_PROJECT_ID`
+- `PUBLIC_SANITY_DATASET`
+- `SANITY_API_READ_TOKEN`
+
+Local middleware testing with Vercel runtime:
+
+```sh
+npx vercel dev
+```
+
+Use `vercel dev` when validating edge rewrite/cookie behavior. `astro dev` does not
+simulate Vercel's routing middleware pipeline for static page requests.
+
 ## Developing `sanity-plugin-ab-testing` locally
 
 `package.json` always lists the **published** plugin
