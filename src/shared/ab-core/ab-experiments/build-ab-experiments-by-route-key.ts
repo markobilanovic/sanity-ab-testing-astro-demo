@@ -1,7 +1,10 @@
-import type { AbDocumentType, AbTestRouteSource } from "../ab-routing";
-import { normalizeNonEmptyString, normalizeNonEmptyStrings } from "../ab-routing";
-import { buildRouteKey } from "./build-route-key";
-import type { AbFeatureFlags, AbMiddlewareExperiment } from "./types";
+import type { AbDocumentType, AbTestRouteSource } from "../ab-routing/index.js";
+import {
+  normalizeNonEmptyString,
+  normalizeNonEmptyStrings,
+} from "../ab-routing/index.js";
+import { buildRouteKey } from "./build-route-key.js";
+import type { AbFeatureFlags, AbMiddlewareExperiment } from "./types.js";
 
 const AB_DOCUMENT_TYPES: AbDocumentType[] = ["post", "page"];
 const AB_TEST_REFERENCE_FIELD_BY_TYPE: Record<

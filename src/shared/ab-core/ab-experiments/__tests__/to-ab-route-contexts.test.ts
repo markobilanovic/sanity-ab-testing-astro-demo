@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { toAbRouteContexts } from "../index";
+import { toAbRouteContexts } from "../index.js";
 
 describe("toAbRouteContexts", () => {
   it("maps experiments to contexts", () => {

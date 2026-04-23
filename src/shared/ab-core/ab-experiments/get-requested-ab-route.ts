@@ -1,4 +1,4 @@
-import type { AbDocumentType } from "../ab-routing";
+import type { AbDocumentType } from "../ab-routing/index.js";
 
 export type AbRouteRequestTarget = {
   documentType: AbDocumentType;

@@ -1,4 +1,4 @@
-import type { AbFeatureFlags } from "./types";
+import type { AbFeatureFlags } from "./types.js";
 
 export function getActiveFeatureFlags(
   featureFlags: AbFeatureFlags,

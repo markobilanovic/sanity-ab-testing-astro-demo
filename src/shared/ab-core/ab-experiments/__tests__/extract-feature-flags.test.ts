@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { extractFeatureFlags } from "../index";
+import { extractFeatureFlags } from "../index.js";
 
 describe("extractFeatureFlags", () => {
   it("returns only boolean/string/undefined flags", () => {

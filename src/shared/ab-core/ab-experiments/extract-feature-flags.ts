@@ -1,4 +1,4 @@
-import type { AbFeatureFlags } from "./types";
+import type { AbFeatureFlags } from "./types.js";
 
 export function extractFeatureFlags(value: unknown): AbFeatureFlags {
   if (!value || typeof value !== "object") {

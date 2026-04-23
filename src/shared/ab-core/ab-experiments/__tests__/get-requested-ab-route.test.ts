@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { getRequestedAbRoute } from "../index";
+import { getRequestedAbRoute } from "../index.js";
 
 describe("getRequestedAbRoute", () => {
   it("detects post routes", () => {

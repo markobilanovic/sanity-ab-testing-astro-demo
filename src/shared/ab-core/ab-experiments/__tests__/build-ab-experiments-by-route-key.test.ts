@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildAbExperimentsByRouteKey } from "../index";
-import type { AbTestRouteSource } from "../../ab-routing";
+import { buildAbExperimentsByRouteKey } from "../index.js";
+import type { AbTestRouteSource } from "../../ab-routing/index.js";
 
 describe("buildAbExperimentsByRouteKey", () => {
   it("maps assigned variants to route keys", () => {

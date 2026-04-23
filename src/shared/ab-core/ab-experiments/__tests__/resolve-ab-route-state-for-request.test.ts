@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { resolveAbRouteStateForRequest } from "../index";
+import { resolveAbRouteStateForRequest } from "../index.js";
 
 describe("resolveAbRouteStateForRequest", () => {
   it("prefers route props and merges contexts", () => {

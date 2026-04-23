@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { getActiveFeatureFlags } from "../index";
+import { getActiveFeatureFlags } from "../index.js";
 
 describe("getActiveFeatureFlags", () => {
   it("filters to active flags", () => {

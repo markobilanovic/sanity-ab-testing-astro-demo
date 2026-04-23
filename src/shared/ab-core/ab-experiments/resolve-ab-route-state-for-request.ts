@@ -1,12 +1,16 @@
-import type { AbDocumentType, AbRouteContext, AbRouteProps } from "../ab-routing";
+import type {
+  AbDocumentType,
+  AbRouteContext,
+  AbRouteProps,
+} from "../ab-routing/index.js";
 import {
   normalizeNonEmptyString,
   orderAndDedupeAbRouteContexts,
   resolveAbRouteContexts,
-} from "../ab-routing";
-import { buildRouteKey } from "./build-route-key";
-import { toAbRouteContexts } from "./to-ab-route-contexts";
-import type { AbMiddlewareExperiment } from "./types";
+} from "../ab-routing/index.js";
+import { buildRouteKey } from "./build-route-key.js";
+import { toAbRouteContexts } from "./to-ab-route-contexts.js";
+import type { AbMiddlewareExperiment } from "./types.js";
 
 export type AbRouteStateInput = {
   routeSlug?: string;

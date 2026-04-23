@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { getCanonicalDocumentSlug } from "../index";
+import { getCanonicalDocumentSlug } from "../index.js";
 
 describe("getCanonicalDocumentSlug", () => {
   it("returns the base document slug", () => {

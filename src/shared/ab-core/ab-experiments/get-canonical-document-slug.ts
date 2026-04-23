@@ -1,4 +1,4 @@
-import { normalizeNonEmptyString } from "../ab-routing";
+import { normalizeNonEmptyString } from "../ab-routing/index.js";
 
 export function getCanonicalDocumentSlug(routeSlug: string): string | null {
   const normalizedRouteSlug = normalizeNonEmptyString(routeSlug);
