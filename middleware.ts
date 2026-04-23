@@ -1,12 +1,12 @@
 import { next, rewrite } from "@vercel/functions";
-import { AB_TEST_VARIANT_ROUTES_QUERY } from "./src/shared/ab-core/ab-routing/queries";
-import type { AbTestRouteSource } from "./src/shared/ab-core/ab-routing/types";
-import { decideAbRewrite } from "./src/shared/ab-core/middleware-core";
+import { AB_TEST_VARIANT_ROUTES_QUERY } from "./src/shared/ab-core/ab-routing/queries.js";
+import type { AbTestRouteSource } from "./src/shared/ab-core/ab-routing/types.js";
+import { decideAbRewrite } from "./src/shared/ab-core/middleware-core.js";
 import {
   buildAbExperimentsByRouteKey,
   extractFeatureFlags,
   getRequestedAbRoute,
-} from "./src/shared/ab-core/ab-experiments";
+} from "./src/shared/ab-core/ab-experiments/index.js";
 
 const AB_TEST_CACHE_TTL_MS = 60_000;
 const DEFAULT_POSTHOG_HOST = "https://us.i.posthog.com";

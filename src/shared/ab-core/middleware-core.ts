@@ -1,11 +1,11 @@
-import type { AbTestRouteSource, AbDocumentType } from "./ab-routing";
-import { serializeCompositeSlug } from "./ab-routing";
-import type { AbFeatureFlags, AbMiddlewareExperiment } from "./ab-experiments";
+import type { AbTestRouteSource, AbDocumentType } from "./ab-routing/index.js";
+import { serializeCompositeSlug } from "./ab-routing/index.js";
+import type { AbFeatureFlags, AbMiddlewareExperiment } from "./ab-experiments/index.js";
 import {
   buildAbExperimentsByRouteKey,
   getCanonicalDocumentSlug,
   getRequestedAbRoute,
-} from "./ab-experiments";
+} from "./ab-experiments/index.js";
 
 export type AbRewriteDecision = {
   rewrittenPath: string | null;
